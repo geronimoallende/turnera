@@ -20,9 +20,9 @@ A multi-tenant appointment scheduling system ("turnera") for medical offices. Bu
 
 ## Supabase Project
 
-- Project ref: `nzozdrakzqhvvmdgkqjh`
-- URL: `https://nzozdrakzqhvvmdgkqjh.supabase.co`
-- Shared with existing chatbot SaaS tables (don't touch those)
+- Project ref: `lavfzixecvbvdqxyiwwl`
+- URL: `https://lavfzixecvbvdqxyiwwl.supabase.co`
+- Project name: turnera
 
 ## Key Architecture Decisions
 
@@ -143,5 +143,5 @@ The user is learning web development through this project. When writing code:
 ## Deployment
 
 - Push to GitHub → Vercel auto-deploys
-- Database migrations: `npx supabase db push --project-ref nzozdrakzqhvvmdgkqjh`
-- Type generation: `npx supabase gen types typescript --project-id nzozdrakzqhvvmdgkqjh > src/lib/types/database.ts`
+- Database migrations: `npx supabase db push --project-ref lavfzixecvbvdqxyiwwl`
+- Type generation: `npx supabase gen types typescript --project-id lavfzixecvbvdqxyiwwl > src/lib/types/database.ts`
