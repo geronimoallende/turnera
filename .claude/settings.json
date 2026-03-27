@@ -1,4 +1,17 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(grep -v '^\\\\.\\\\.$')",
+      "Bash(grep -v '^\\\\.$')",
+      "Bash(grep -v '^node_modules$')",
+      "Bash(grep -v '^src$')",
+      "Bash(grep -v '^docs$')",
+      "Bash(grep -v '^public$')",
+      "Bash(grep -v '^supabase$')",
+      "Bash(grep -v '^tools$')",
+      "Bash(grep -v '^studies$')"
+    ]
+  },
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
