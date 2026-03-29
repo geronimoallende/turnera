@@ -59,16 +59,23 @@ export default function LoginPage() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader className="text-center">
-        <CardTitle className="text-2xl">Turnera</CardTitle>
-        <CardDescription>Sign in to your account</CardDescription>
+    <Card className="w-full max-w-sm rounded-md border border-[#e5e5e5] shadow-none">
+      <CardHeader className="pb-4 text-center">
+        {/* Blue title to match the sidebar branding */}
+        <CardTitle className="text-2xl font-semibold text-blue-800">
+          Turnera
+        </CardTitle>
+        <CardDescription className="text-gray-500">
+          Sign in to your account
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {/* onSubmit runs handleLogin when the user clicks "Sign in" or presses Enter */}
         <form onSubmit={handleLogin} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="email" className="text-sm text-[#1a1a1a]">
+              Email
+            </Label>
             <Input
               id="email"
               type="email"
@@ -76,11 +83,14 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="password" className="text-sm text-[#1a1a1a]">
+              Password
+            </Label>
             <Input
               id="password"
               type="password"
@@ -88,6 +98,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
             />
           </div>
 
@@ -96,7 +107,12 @@ export default function LoginPage() {
             <p className="text-sm text-red-600">{error}</p>
           )}
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          {/* Flat blue button — matches primary accent color */}
+          <Button
+            type="submit"
+            className="w-full bg-blue-500 text-white shadow-none hover:bg-blue-600"
+            disabled={loading}
+          >
             {loading ? "Signing in..." : "Sign in"}
           </Button>
         </form>

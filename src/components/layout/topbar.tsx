@@ -35,7 +35,7 @@ export function Topbar() {
   }
 
   return (
-    <header className="flex h-14 items-center justify-between border-b bg-white px-4">
+    <header className="flex h-12 items-center justify-between border-b bg-white px-4">
       {/* Left side: clinic switcher */}
       <ClinicSwitcher />
 

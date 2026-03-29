@@ -27,7 +27,7 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      <div className="rounded-lg border bg-white p-8 text-center text-gray-500">
+      <div className="rounded-md border bg-white p-8 text-center text-gray-500">
         Dashboard content coming soon. We&apos;ll add stats, today&apos;s agenda, and
         alerts here in Task 15.
       </div>

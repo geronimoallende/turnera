@@ -1,7 +1,9 @@
 # ADR-005: Global Patients with Per-Clinic Junction Table
 
+> **SUPERSEDED** by [ADR-011: Clinic-Owned Patients](011-clinic-owned-patients.md). The global `patients` table has been removed. All patient data now lives in `clinic_patients` per clinic.
+
 ## Status
-Accepted
+Superseded
 
 ## Context
 A patient might visit Clinic A and Clinic B in the same city. A doctor might work at both clinics. The original design had `patients.clinic_id` — one patient belongs to one clinic. This breaks cross-clinic scenarios.

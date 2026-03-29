@@ -61,10 +61,10 @@ export function Sidebar() {
   const { activeRole } = useClinic()
 
   return (
-    <aside className="flex h-full w-64 flex-col border-r bg-white">
+    <aside className="flex h-full w-64 flex-col bg-blue-800">
       {/* Logo / App name at the top */}
-      <div className="flex h-14 items-center border-b px-4">
-        <Link href="/dashboard" className="text-xl font-semibold">
+      <div className="flex h-12 items-center border-b border-blue-700 px-4">
+        <Link href="/dashboard" className="text-xl font-semibold text-white">
           Turnera
         </Link>
       </div>
@@ -93,10 +93,10 @@ export function Sidebar() {
                 className={cn(
                   // Base styles for all links
                   "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  // Active link = gray background, dark text
+                  // Active link = lighter blue background, white text
                   isActive
-                    ? "bg-gray-100 text-gray-900"
-                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    ? "bg-blue-600 text-white"
+                    : "text-blue-100 hover:bg-blue-700 hover:text-white"
                 )}
               >
                 {/* The icon — each lucide icon is a React component */}

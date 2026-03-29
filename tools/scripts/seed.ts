@@ -3,7 +3,7 @@
  *
  * Creates:
  * - 1 clinic ("Clinica Demo")
- * - 5 sample patients with clinic_patients links
+ * - 5 sample patients (directly in clinic_patients)
  *
  * Run: npx tsx tools/scripts/seed.ts
  *
@@ -64,10 +64,11 @@ async function seed() {
   }
   console.log(`  ✓ Clinic: ${clinic.name} (${clinic.id})\n`)
 
-  // 2. Create patients
+  // 2. Create patients (directly in clinic_patients — no separate patients table)
   console.log('Creating patients...')
-  const patientsData = [
+  const clinicPatientsData = [
     {
+      clinic_id: clinic.id,
       first_name: 'Juan',
       last_name: 'García',
       dni: '20345678',
@@ -76,8 +77,13 @@ async function seed() {
       phone: '+5411-1111-1111',
       email: 'juan.garcia@email.com',
       whatsapp_phone: '+5411-1111-1111',
+      insurance_provider: 'OSDE',
+      insurance_plan: 'OSDE 310',
+      patient_type: 'regular',
+      frequency: 'habitual',
     },
     {
+      clinic_id: clinic.id,
       first_name: 'María',
       last_name: 'López',
       dni: '27654321',
@@ -86,8 +92,13 @@ async function seed() {
       phone: '+5411-2222-2222',
       email: 'maria.lopez@email.com',
       whatsapp_phone: '+5411-2222-2222',
+      insurance_provider: 'Swiss Medical',
+      insurance_plan: 'SMG 20',
+      patient_type: 'regular',
+      frequency: 'sporadic',
     },
     {
+      clinic_id: clinic.id,
       first_name: 'Carlos',
       last_name: 'Pérez',
       dni: '30111222',
@@ -96,8 +107,13 @@ async function seed() {
       phone: '+5411-3333-3333',
       email: 'carlos.perez@email.com',
       whatsapp_phone: '+5411-3333-3333',
+      insurance_provider: 'OSDE',
+      insurance_plan: 'OSDE 210',
+      patient_type: 'regular',
+      frequency: 'habitual',
     },
     {
+      clinic_id: clinic.id,
       first_name: 'Ana',
       last_name: 'Martínez',
       dni: '35222333',
@@ -106,8 +122,13 @@ async function seed() {
       phone: '+5411-4444-4444',
       email: 'ana.martinez@email.com',
       whatsapp_phone: '+5411-4444-4444',
+      insurance_provider: 'Particular',
+      insurance_plan: null,
+      patient_type: 'new',
+      frequency: 'first_time',
     },
     {
+      clinic_id: clinic.id,
       first_name: 'Roberto',
       last_name: 'Fernández',
       dni: '18999888',
@@ -118,12 +139,19 @@ async function seed() {
       whatsapp_phone: '+5411-5555-5555',
       blood_type: 'A+',
       allergies: 'Penicillin',
+      insurance_provider: 'Galeno',
+      insurance_plan: 'Galeno Azul',
+      patient_type: 'regular',
+      frequency: 'habitual',
+      no_show_count: 2,
+      blacklist_status: 'warned' as const,
+      tags: ['late_arrivals'],
     },
   ]
 
   const { data: patients, error: patientsError } = await supabase
-    .from('patients')
-    .upsert(patientsData, { onConflict: 'dni' })
+    .from('clinic_patients')
+    .upsert(clinicPatientsData, { onConflict: 'clinic_id,dni' })
     .select()
 
   if (patientsError) {
@@ -134,31 +162,7 @@ async function seed() {
   for (const p of patients) {
     console.log(`  ✓ Patient: ${p.first_name} ${p.last_name} (DNI: ${p.dni})`)
   }
-
-  // 3. Link patients to clinic with per-clinic metadata
-  console.log('\nLinking patients to clinic...')
-  const clinicPatientsData = patients.map((patient, i) => ({
-    clinic_id: clinic.id,
-    patient_id: patient.id,
-    insurance_provider: ['OSDE', 'Swiss Medical', 'OSDE', 'Particular', 'Galeno'][i],
-    insurance_plan: ['OSDE 310', 'SMG 20', 'OSDE 210', null, 'Galeno Azul'][i],
-    patient_type: ['regular', 'regular', 'regular', 'new', 'regular'][i],
-    frequency: ['habitual', 'sporadic', 'habitual', 'first_time', 'habitual'][i],
-    // Roberto has 2 no-shows and a warning
-    no_show_count: i === 4 ? 2 : 0,
-    blacklist_status: (i === 4 ? 'warned' : 'none') as 'warned' | 'none',
-    tags: i === 4 ? ['late_arrivals'] : [],
-  }))
-
-  const { error: linkError } = await supabase
-    .from('clinic_patients')
-    .upsert(clinicPatientsData, { onConflict: 'clinic_id,patient_id' })
-
-  if (linkError) {
-    console.error('Error linking patients:', linkError.message)
-    process.exit(1)
-  }
-  console.log(`  ✓ Linked ${patients.length} patients to ${clinic.name}`)
+  console.log(`  → ${patients.length} patients linked to ${clinic.name}`)
 
   console.log('\n✅ Seed complete!')
   console.log(`\nClinic ID: ${clinic.id}`)

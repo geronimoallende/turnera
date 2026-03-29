@@ -6,7 +6,8 @@ Althem Group needs a SaaS appointment scheduling system ("turnera") for medical 
 
 **Key decisions:**
 - **SaaS multi-tenant** from the start (`clinic_id` isolation via junction tables)
-- **Global patients + doctors** with per-clinic metadata via junction tables (a patient/doctor can exist at multiple clinics)
+- **Clinic-owned patients**: each clinic owns their patient records independently in `clinic_patients` (no global patient table). DNI is unique per clinic, not globally.
+- **Global doctors** with per-clinic metadata via junction tables (a doctor can work at multiple clinics)
 - **Per-clinic blacklist**: no-show tracking is per-clinic, Clinic A's blacklist doesn't affect Clinic B
 - **Custom calendar in Supabase** (waitlists, overbooking, CRM integration, chatbot queries). Google Calendar sync deferred to Phase 4.
 - **Same Supabase project** (`nzozdrakzqhvvmdgkqjh.supabase.co`) alongside existing chatbot tables
@@ -36,30 +37,30 @@ Althem Group needs a SaaS appointment scheduling system ("turnera") for medical 
 
 ---
 
-## Database Schema (Supabase) — 13 Tables
+## Database Schema (Supabase) — 12 Tables
 
-All tables coexist with existing chatbot tables. Multi-tenant isolation via junction tables + RLS.
+All tables coexist with existing chatbot tables. Multi-tenant isolation via `clinic_id` + RLS.
 
-### Architecture: Global Entities + Per-Clinic Metadata
+### Architecture: Global Entities + Per-Clinic Data
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │ GLOBAL (shared across clinics)                      │
-│   patients (identity: DNI, name, phone)             │
 │   staff (identity: auth_user_id, name, email)       │
 │   doctors (specialty, license_number)               │
 ├─────────────────────────────────────────────────────┤
-│ JUNCTION (per-clinic views)                         │
-│   clinic_patients (blacklist, insurance, tags, CRM) │
+│ JUNCTION (per-clinic metadata for global entities)  │
 │   staff_clinics (role per clinic)                   │
 │   doctor_clinic_settings (fee, slots, overbooking)  │
 ├─────────────────────────────────────────────────────┤
 │ PER-CLINIC (always have clinic_id)                  │
-│   clinics, appointments, doctor_schedules,          │
-│   schedule_overrides, waitlist, reminders,           │
-│   appointment_history                               │
+│   clinics, clinic_patients, appointments,           │
+│   doctor_schedules, schedule_overrides, waitlist,   │
+│   reminders, appointment_history                    │
 └─────────────────────────────────────────────────────┘
 ```
+
+> **Note:** There is no global `patients` table. Each clinic owns their patient records directly in `clinic_patients`. If a patient visits two clinics, they exist as two separate records. See `docs/decisions/011-clinic-owned-patients.md`.
 
 ### Table Details
 
@@ -145,57 +146,44 @@ Only doctor-specific identity data. Per-clinic config lives in `doctor_clinic_se
 | created_at, updated_at | TIMESTAMPTZ | |
 | **UNIQUE** | (doctor_id, clinic_id) | |
 
-#### 6. `patients` — Global Patient Identity
+#### 6. `clinic_patients` — Per-Clinic Patient Records
 
-Only core identity data. Per-clinic metadata lives in `clinic_patients`.
-
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID PK | |
-| dni | TEXT NOT NULL UNIQUE | National ID — natural unique key |
-| full_name | TEXT NOT NULL | |
-| date_of_birth | DATE | |
-| phone | TEXT | |
-| email | TEXT | |
-| whatsapp_phone | TEXT | For chatbot matching |
-| gender | TEXT | |
-| blood_type | TEXT | |
-| allergies | TEXT[] | |
-| created_at, updated_at | TIMESTAMPTZ | |
-
-#### 7. `clinic_patients` — **NEW** Junction: Patient ↔ Clinic + CRM + Blacklist
-
-Each clinic has their own view of a patient. Blacklisting at Clinic A does NOT affect Clinic B.
+Each clinic owns their patient records independently. There is NO global patient table. If a patient visits two clinics, they exist as two separate records. DNI is unique per clinic, not globally.
 
 | Column | Type | Notes |
 |--------|------|-------|
 | id | UUID PK | |
 | clinic_id | UUID FK → clinics | |
-| patient_id | UUID FK → patients | |
+| **Identity** | | |
+| first_name | TEXT NOT NULL | |
+| last_name | TEXT NOT NULL | |
+| dni | TEXT | National ID |
+| phone | TEXT | |
+| email | TEXT | |
+| whatsapp_phone | TEXT | For chatbot matching |
+| date_of_birth | DATE | |
+| gender | TEXT | |
+| blood_type | TEXT | |
+| allergies | TEXT | |
+| is_active | BOOLEAN DEFAULT true | Soft-delete |
 | **Blacklist** | | |
 | blacklist_status | ENUM (none/warned/blacklisted) DEFAULT 'none' | Per-clinic! |
 | no_show_count | INTEGER DEFAULT 0 | Auto-incremented by trigger |
-| blacklist_reason | TEXT | |
-| blacklisted_at | TIMESTAMPTZ | |
 | **Insurance** | | |
 | insurance_provider | TEXT | "OSDE", "Swiss Medical" |
 | insurance_plan | TEXT | "OSDE 210" |
 | insurance_member_number | TEXT | |
 | **CRM** | | |
-| patient_type | ENUM (regular/vip/new/referred) DEFAULT 'new' | |
+| patient_type | TEXT | regular/vip/new/referred |
 | frequency | TEXT | weekly/monthly/occasional |
-| priority | INTEGER DEFAULT 0 | |
-| financial_status | ENUM (up_to_date/pending/overdue) DEFAULT 'up_to_date' | |
+| priority | TEXT | |
+| financial_status | TEXT | up_to_date/pending/overdue |
 | tags | TEXT[] DEFAULT '{}' | ['conflictive', 'prefers_afternoon'] |
 | notes | TEXT | Secretary notes about this patient |
-| family_group_id | UUID | Links family members within clinic |
-| family_relationship | TEXT | spouse_of, child_of |
-| family_linked_patient_id | UUID FK → patients | |
-| chatbot_session_id | TEXT | |
 | created_at, updated_at | TIMESTAMPTZ | |
-| **UNIQUE** | (clinic_id, patient_id) | |
+| **UNIQUE** | (clinic_id, dni) | DNI unique per clinic only |
 
-#### 8. `doctor_schedules` — Weekly Recurring Availability (Per-Clinic)
+#### 7. `doctor_schedules` — Weekly Recurring Availability (Per-Clinic)
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -210,7 +198,7 @@ Each clinic has their own view of a patient. Blacklisting at Clinic A does NOT a
 | valid_until | DATE | null = indefinite |
 | created_at | TIMESTAMPTZ | |
 
-#### 9. `schedule_overrides` — One-Off Exceptions (Per-Clinic)
+#### 8. `schedule_overrides` — One-Off Exceptions (Per-Clinic)
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -223,14 +211,14 @@ Each clinic has their own view of a patient. Blacklisting at Clinic A does NOT a
 | reason | TEXT | "Vacation", "Conference" |
 | created_at | TIMESTAMPTZ | |
 
-#### 10. `appointments` — Core Table
+#### 9. `appointments` — Core Table
 
 | Column | Type | Notes |
 |--------|------|-------|
 | id | UUID PK | |
 | clinic_id | UUID FK → clinics | |
 | doctor_id | UUID FK → doctors | |
-| patient_id | UUID FK → patients | |
+| patient_id | UUID FK → clinic_patients | |
 | appointment_date | DATE NOT NULL | Separate from time for indexing |
 | start_time, end_time | TIME NOT NULL | |
 | duration_minutes | INTEGER NOT NULL | |
@@ -276,13 +264,13 @@ Each clinic has their own view of a patient. Blacklisting at Clinic A does NOT a
 
 **Indexes**: (clinic_id, appointment_date), (doctor_id, appointment_date), (patient_id)
 
-#### 11. `waitlist`
+#### 10. `waitlist`
 
 | Column | Type | Notes |
 |--------|------|-------|
 | id | UUID PK | |
 | clinic_id | UUID FK → clinics | |
-| patient_id | UUID FK → patients | |
+| patient_id | UUID FK → clinic_patients | |
 | doctor_id | UUID FK → doctors | null = any doctor |
 | preferred_date_start/end | DATE | |
 | preferred_time_start/end | TIME | |
@@ -291,7 +279,7 @@ Each clinic has their own view of a patient. Blacklisting at Clinic A does NOT a
 | offered_appointment_id | UUID FK → appointments | |
 | created_at, updated_at | TIMESTAMPTZ | |
 
-#### 12. `appointment_history` — Immutable Audit Log
+#### 11. `appointment_history` — Immutable Audit Log
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -304,14 +292,14 @@ Each clinic has their own view of a patient. Blacklisting at Clinic A does NOT a
 | performed_by_source | TEXT | 'web_app', 'chatbot', 'n8n', 'system' |
 | created_at | TIMESTAMPTZ | |
 
-#### 13. `reminders` — Communication Tracking
+#### 12. `reminders` — Communication Tracking
 
 | Column | Type | Notes |
 |--------|------|-------|
 | id | UUID PK | |
 | appointment_id | UUID FK → appointments | |
 | clinic_id | UUID FK → clinics | |
-| patient_id | UUID FK → patients | |
+| patient_id | UUID FK → clinic_patients | |
 | reminder_type | ENUM (confirmation_request/reminder_24h/reminder_sameday/post_consultation) | |
 | channel | ENUM (whatsapp/email/sms) | |
 | status | ENUM (pending/sent/delivered/read/failed) | |
@@ -368,7 +356,7 @@ Runs BEFORE INSERT/UPDATE on `appointments`. Raises error if overlap exists for 
 Runs BEFORE UPDATE on `appointments`. If `payment_status` changed, verifies the user is admin or secretary. Auto-fills `payment_updated_by` and `payment_updated_at`.
 
 #### `update_no_show_count()` — Trigger
-Runs AFTER UPDATE on `appointments`. When status changes to `no_show`, increments `clinic_patients.no_show_count` for that clinic+patient.
+Runs AFTER UPDATE on `appointments`. When status changes to `no_show`, increments `clinic_patients.no_show_count` for that patient record.
 
 ### RLS Policies
 
@@ -378,8 +366,7 @@ All RLS policies use `clinic_id = ANY(get_user_clinic_ids())` for multi-clinic s
 - `clinics`: SELECT where `id = ANY(get_user_clinic_ids())`. UPDATE only if `get_user_role(id) = 'admin'`
 - `staff`: SELECT where staff shares any clinic with current user
 - `staff_clinics`: SELECT/INSERT/UPDATE restricted to user's clinics, writes require admin role
-- `patients`: SELECT via `clinic_patients` junction (only see patients linked to your clinics). INSERT open (then must link via `clinic_patients`). UPDATE requires admin/secretary.
-- `clinic_patients`: Filtered by `clinic_id`. Writes require admin/secretary role.
+- `clinic_patients`: Filtered by `clinic_id`. Writes require admin/secretary role. Doctors read-only.
 - `appointments`: SELECT filtered by `clinic_id`. INSERT by admin/secretary or doctor (own appointments). Payment updates enforced by trigger.
 - `appointment_history`, `reminders`, `waitlist`: Filtered by `clinic_id`
 - **n8n**: Uses `service_role` key (bypasses RLS)
@@ -404,7 +391,7 @@ turnera/
 │   │   ├── 002-multi-tenancy.md
 │   │   ├── 003-auth-model.md            # Staff-only, no patient login
 │   │   ├── 004-tech-stack.md
-│   │   ├── 005-global-patients.md       # Global patients + junction tables
+│   │   ├── 005-global-patients.md       # (superseded by 011-clinic-owned-patients)
 │   │   ├── 006-n8n-per-clinic.md        # One workflow per clinic
 │   │   ├── 007-payment-permissions.md   # Secretary/admin only
 │   │   └── template.md
@@ -441,7 +428,7 @@ turnera/
 │       ├── 002_create_clinics.sql
 │       ├── 003_create_staff.sql         # staff + staff_clinics
 │       ├── 004_create_doctors.sql       # doctors + doctor_clinic_settings
-│       ├── 005_create_patients.sql      # patients + clinic_patients
+│       ├── 005_create_patients.sql      # clinic_patients (clinic-owned, no global table)
 │       ├── 006_create_schedules.sql     # doctor_schedules + schedule_overrides
 │       ├── 007_create_appointments.sql
 │       ├── 008_create_waitlist.sql
@@ -572,7 +559,7 @@ For now, the app includes:
 | `/api/chatbot/doctors` | GET | List doctors with specialties |
 | `/api/chatbot/confirm` | POST | Patient confirms via chatbot response |
 
-**Patient creation via chatbot**: Upserts into `patients` by DNI/phone, then links to `clinic_patients` for that clinic.
+**Patient creation via chatbot**: Upserts into `clinic_patients` by DNI/phone for that specific clinic. No global patient table involved.
 
 ---
 
@@ -603,22 +590,31 @@ Multi-clinic staff see a **Clinic Switcher** dropdown in the topbar. All data up
 
 ## UI Approach
 
-**Simple, white, easily modifiable.** Use `/interface-design` skill with these constraints:
-- **Base**: shadcn/ui (Radix + Tailwind) — neutral, unstyled by default
-- **Color scheme**: White background, gray-50/100 for cards, gray-900 for text. One blue accent for primary actions.
-- **Typography**: Inter (or system font stack)
-- **Spacing**: Generous whitespace
+**Sober, blue/white, Obsidian-inspired flat design.** Always use `/frontend-design` skill for UI work.
+- **Base**: shadcn/ui (Radix + Tailwind)
+- **Sidebar**: Blue-800 (`#1e40af`) background, white text, blue-600 active link
+- **Content area**: White background, gray-50 cards, thin 1px borders (`#e5e5e5`)
+- **Primary accent**: Blue-500 (`#3b82f6`) for buttons, links, active states
+- **Typography**: Inter (or system font stack), near-black (`#1a1a1a`)
+- **Style**: Flat (no shadows), compact spacing, minimal color usage, clean
 - **Status colors**: Green (confirmed), Yellow (pending), Red (cancelled/emergency), Gray (no-show, completed)
 - **Blacklist badge**: Red "Blacklisted" or Yellow "Warned" badge on patient cards
-- **Why white/simple**: Each clinic can later customize colors/branding
 
 ---
 
 ## Implementation Phases
 
 ### Phase 1: Core MVP (Weeks 1-4)
-- **Week 1**: Project setup (Next.js + Supabase + Auth). All 15 database migrations. Login page. Seed script.
-- **Week 2**: Patient CRUD (upsert by DNI, clinic_patients linking). Doctor schedule configuration. `get_available_slots` function.
+- **Week 1**: Project setup (Next.js + Supabase + Auth). All 15 database migrations. Login page. Seed script. ✅ DONE
+- **Week 2**:
+  - **Spec A** — UI restyling (blue sidebar, Obsidian-flat style) + Patient CRUD:
+    - Restyle sidebar (blue-800 bg), topbar, login, dashboard, shadcn theme
+    - Patient list page: search-first approach (search bar + table, 20/page)
+    - Create patient: minimal form (first name, last name, DNI, phone). DNI unique per clinic.
+    - Edit patient: full form split in Personal Info + Insurance & Notes sections
+    - API routes: GET/POST /api/patients, GET/PUT /api/patients/[id]
+    - React Query hooks for data fetching
+  - **Spec B** — Doctor schedule configuration + `get_available_slots` wiring (separate spec)
 - **Week 3**: Appointment CRUD. FullCalendar views (day/week/month). Quick booking. Appointment detail/edit.
 - **Week 4**: Dashboard overview (today's agenda, stats, alerts). Status workflow. Payment marking (secretary/admin). PDF export.
 
@@ -660,13 +656,13 @@ Multi-clinic staff see a **Clinic Switcher** dropdown in the topbar. All data up
 
 ## Verification Plan
 
-1. **Database**: Run all 15 migrations. Run `seed.ts`. Verify junction tables, RLS policies, and `get_available_slots`.
+1. **Database**: Run all 15 migrations. Run `seed.ts`. Verify RLS policies and `get_available_slots`.
 2. **Auth**: Test login for admin/doctor/secretary. Verify route guards. Verify patients cannot log in.
 3. **Multi-clinic**: Create staff linked to 2 clinics. Verify clinic switcher works. Verify data isolation.
 4. **Blacklist**: Mark appointment as no-show. Verify `no_show_count` incremented only for that clinic. Verify other clinic sees clean record.
 5. **Payments**: Verify doctor CANNOT change payment_status. Verify secretary/admin CAN.
 6. **Calendar**: Create appointments. Verify FullCalendar. Test drag-drop. Verify overlap detection.
-7. **Chatbot API**: curl `/api/chatbot/available-slots` and `/api/chatbot/book`. Verify patient upsert by DNI.
+7. **Chatbot API**: curl `/api/chatbot/available-slots` and `/api/chatbot/book`. Verify patient creation in `clinic_patients` by DNI.
 8. **Realtime**: Two tabs, create appointment in one — appears in other.
 9. **Reports**: Verify on-the-fly aggregates match seed data.
 10. **PDF**: Export daily agenda, verify content.

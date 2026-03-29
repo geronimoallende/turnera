@@ -30,15 +30,15 @@ A multi-tenant appointment scheduling system ("turnera") for medical offices. Bu
 Every per-clinic table has `clinic_id`. RLS policies filter by `clinic_id = ANY(get_user_clinic_ids())`. See `docs/decisions/002-multi-tenancy.md`.
 
 ### Global vs Per-Clinic Entities
-- **Global** (no clinic_id): `patients`, `staff`, `doctors`
-- **Junction tables** (per-clinic metadata): `clinic_patients`, `staff_clinics`, `doctor_clinic_settings`
-- **Per-clinic** (always have clinic_id): `appointments`, `waitlist`, `reminders`, `doctor_schedules`, `schedule_overrides`, `appointment_history`
+- **Global** (no clinic_id): `staff`, `doctors`
+- **Junction tables** (per-clinic metadata): `staff_clinics`, `doctor_clinic_settings`
+- **Per-clinic** (always have clinic_id): `clinic_patients`, `appointments`, `waitlist`, `reminders`, `doctor_schedules`, `schedule_overrides`, `appointment_history`
 
 ### Auth Model
 Only staff logs in (admin/doctor/secretary). Patients do NOT have accounts. See `docs/decisions/003-auth-model.md`.
 
 ### Patient Identity
-Patients are global (DNI is unique key). `clinic_patients` junction table holds per-clinic metadata: blacklist status, no-show count, insurance, tags. A patient blacklisted at Clinic A is NOT blacklisted at Clinic B. See `docs/decisions/005-global-patients.md`.
+Each clinic owns their patient records independently in `clinic_patients`. DNI is unique per clinic (`UNIQUE(clinic_id, dni)`), not globally. There is no shared/global patient table — if a patient visits two clinics, they exist as two separate records. This keeps queries simple (no JOINs) and gives each clinic full control over their data. See `docs/decisions/011-clinic-owned-patients.md`.
 
 ### Payments
 Only admin and secretary can mark payments. Doctors see payment status as read-only. Enforced by database trigger. See `docs/decisions/007-payment-permissions.md`.
@@ -79,21 +79,20 @@ src/providers/           # AuthProvider, ClinicProvider, RealtimeProvider
 middleware.ts            # Auth redirect + role-based route guards
 ```
 
-## Database Tables (13)
+## Database Tables (12)
 
 1. `clinics` — tenant config
 2. `staff` — staff identity (global)
 3. `staff_clinics` — staff ↔ clinic + role (junction)
 4. `doctors` — doctor profile (global)
 5. `doctor_clinic_settings` — per-clinic doctor config (junction)
-6. `patients` — patient identity (global, DNI unique)
-7. `clinic_patients` — per-clinic patient metadata (junction, blacklist, CRM)
-8. `doctor_schedules` — weekly recurring availability
-9. `schedule_overrides` — one-off exceptions (vacations, sick days)
-10. `appointments` — core table
-11. `waitlist` — patients waiting for openings
-12. `appointment_history` — immutable audit log
-13. `reminders` — outbound communication tracking
+6. `clinic_patients` — all patient data per clinic (personal info + metadata, blacklist, CRM)
+7. `doctor_schedules` — weekly recurring availability
+8. `schedule_overrides` — one-off exceptions (vacations, sick days)
+9. `appointments` — core table
+10. `waitlist` — patients waiting for openings
+11. `appointment_history` — immutable audit log
+12. `reminders` — outbound communication tracking
 
 ## Database Functions
 
@@ -131,10 +130,22 @@ The user is learning web development through this project. When writing code:
 - Connect new concepts to the turnera project, not abstract examples
 - Explain before code, not after
 
+### MANDATORY: Explain After Every Task
+
+After completing ANY implementation task (feature, migration, refactor, fix), you MUST explain what you did. For EACH file created or modified:
+
+1. Link the file using `[filename.ts](path/to/file.ts)` syntax
+2. Show the actual code that was written or changed
+3. Explain every line — what it does, why it's there
+4. Use analogies to connect abstract concepts to real-world things
+5. Ask "Do you understand? Should I go deeper, or continue to the next file?"
+
+Explain in dependency order: database changes → API routes → hooks → components → pages → config/docs. Never skip a file. Never assume the user knows a concept — explain it when it first appears.
+
 ## Documentation
 
 - `docs/architecture/` — system overview, database schema, API routes, realtime
-- `docs/decisions/` — ADR files (001-009) with context, decision, alternatives, consequences
+- `docs/decisions/` — ADR files (001-011) with context, decision, alternatives, consequences
 - `docs/runbooks/` — deploy, onboarding, migrations, troubleshooting, backup
 - `docs/system-design.md` — backend data flow, auth flow, appointment lifecycle
 - `docs/design-system.md` — colors, typography, spacing, component guidelines

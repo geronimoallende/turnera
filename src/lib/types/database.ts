@@ -234,7 +234,7 @@ export type Database = {
             foreignKeyName: "appointments_patient_id_fkey"
             columns: ["patient_id"]
             isOneToOne: false
-            referencedRelation: "patients"
+            referencedRelation: "clinic_patients"
             referencedColumns: ["id"]
           },
           {
@@ -269,61 +269,88 @@ export type Database = {
       }
       clinic_patients: {
         Row: {
+          allergies: string | null
           blacklist_status: Database["public"]["Enums"]["blacklist_status"]
+          blood_type: string | null
           clinic_id: string
           created_at: string | null
+          date_of_birth: string | null
+          dni: string | null
+          email: string | null
           financial_status: string | null
+          first_name: string
           frequency: string | null
+          gender: string | null
           id: string
           insurance_member_number: string | null
           insurance_plan: string | null
           insurance_provider: string | null
           is_active: boolean | null
+          last_name: string
           no_show_count: number
           notes: string | null
-          patient_id: string
           patient_type: string | null
+          phone: string | null
           priority: string | null
           tags: string[] | null
           updated_at: string | null
+          whatsapp_phone: string | null
         }
         Insert: {
+          allergies?: string | null
           blacklist_status?: Database["public"]["Enums"]["blacklist_status"]
+          blood_type?: string | null
           clinic_id: string
           created_at?: string | null
+          date_of_birth?: string | null
+          dni?: string | null
+          email?: string | null
           financial_status?: string | null
+          first_name: string
           frequency?: string | null
+          gender?: string | null
           id?: string
           insurance_member_number?: string | null
           insurance_plan?: string | null
           insurance_provider?: string | null
           is_active?: boolean | null
+          last_name: string
           no_show_count?: number
           notes?: string | null
-          patient_id: string
           patient_type?: string | null
+          phone?: string | null
           priority?: string | null
           tags?: string[] | null
           updated_at?: string | null
+          whatsapp_phone?: string | null
         }
         Update: {
+          allergies?: string | null
           blacklist_status?: Database["public"]["Enums"]["blacklist_status"]
+          blood_type?: string | null
           clinic_id?: string
           created_at?: string | null
+          date_of_birth?: string | null
+          dni?: string | null
+          email?: string | null
           financial_status?: string | null
+          first_name?: string
           frequency?: string | null
+          gender?: string | null
           id?: string
           insurance_member_number?: string | null
           insurance_plan?: string | null
           insurance_provider?: string | null
           is_active?: boolean | null
+          last_name?: string
           no_show_count?: number
           notes?: string | null
-          patient_id?: string
           patient_type?: string | null
+          phone?: string | null
           priority?: string | null
           tags?: string[] | null
           updated_at?: string | null
+          whatsapp_phone?: string | null
         }
         Relationships: [
           {
@@ -331,13 +358,6 @@ export type Database = {
             columns: ["clinic_id"]
             isOneToOne: false
             referencedRelation: "clinics"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "clinic_patients_patient_id_fkey"
-            columns: ["patient_id"]
-            isOneToOne: false
-            referencedRelation: "patients"
             referencedColumns: ["id"]
           },
         ]
@@ -569,73 +589,44 @@ export type Database = {
           },
         ]
       }
-      patients: {
+      documents_pg: {
         Row: {
-          allergies: string | null
-          blood_type: string | null
-          created_at: string | null
-          date_of_birth: string | null
-          dni: string | null
-          email: string | null
-          family_group_id: string | null
-          family_linked_patient_id: string | null
-          family_relationship: string | null
-          first_name: string
-          gender: string | null
+          embedding: string | null
           id: string
-          is_active: boolean | null
-          last_name: string
-          phone: string | null
-          updated_at: string | null
-          whatsapp_phone: string | null
+          metadata: Json | null
+          text: string | null
         }
         Insert: {
-          allergies?: string | null
-          blood_type?: string | null
-          created_at?: string | null
-          date_of_birth?: string | null
-          dni?: string | null
-          email?: string | null
-          family_group_id?: string | null
-          family_linked_patient_id?: string | null
-          family_relationship?: string | null
-          first_name: string
-          gender?: string | null
+          embedding?: string | null
           id?: string
-          is_active?: boolean | null
-          last_name: string
-          phone?: string | null
-          updated_at?: string | null
-          whatsapp_phone?: string | null
+          metadata?: Json | null
+          text?: string | null
         }
         Update: {
-          allergies?: string | null
-          blood_type?: string | null
-          created_at?: string | null
-          date_of_birth?: string | null
-          dni?: string | null
-          email?: string | null
-          family_group_id?: string | null
-          family_linked_patient_id?: string | null
-          family_relationship?: string | null
-          first_name?: string
-          gender?: string | null
+          embedding?: string | null
           id?: string
-          is_active?: boolean | null
-          last_name?: string
-          phone?: string | null
-          updated_at?: string | null
-          whatsapp_phone?: string | null
+          metadata?: Json | null
+          text?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "patients_family_linked_patient_id_fkey"
-            columns: ["family_linked_patient_id"]
-            isOneToOne: false
-            referencedRelation: "patients"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
+      }
+      n8n_chat_histories: {
+        Row: {
+          id: number
+          message: Json
+          session_id: string
+        }
+        Insert: {
+          id?: number
+          message: Json
+          session_id: string
+        }
+        Update: {
+          id?: number
+          message?: Json
+          session_id?: string
+        }
+        Relationships: []
       }
       reminders: {
         Row: {
@@ -705,7 +696,7 @@ export type Database = {
             foreignKeyName: "reminders_patient_id_fkey"
             columns: ["patient_id"]
             isOneToOne: false
-            referencedRelation: "patients"
+            referencedRelation: "clinic_patients"
             referencedColumns: ["id"]
           },
         ]
@@ -920,7 +911,7 @@ export type Database = {
             foreignKeyName: "waitlist_patient_id_fkey"
             columns: ["patient_id"]
             isOneToOne: false
-            referencedRelation: "patients"
+            referencedRelation: "clinic_patients"
             referencedColumns: ["id"]
           },
         ]
