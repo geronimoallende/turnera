@@ -21,6 +21,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { checkDoctorPermission } from "@/lib/auth/check-doctor-permission"
 
 // ─── Validation Schemas ───────────────────────────────────────────
 
@@ -117,7 +118,14 @@ export async function POST(
 
   const supabase = await createClient()
 
-  // 2. Check for overlapping schedule blocks on the same day.
+  // 2. Verify the caller has permission to create schedules for this doctor.
+  //    Admin can manage any doctor's schedule. A doctor can manage only their own.
+  const permission = await checkDoctorPermission(supabase, clinic_id, id)
+  if (!permission.authorized) {
+    return NextResponse.json({ error: permission.error }, { status: permission.status })
+  }
+
+  // 3. Check for overlapping schedule blocks on the same day.
   //    Two blocks overlap if one starts before the other ends.
   //    Overlap condition: existing.start_time < new.end_time AND existing.end_time > new.start_time
   const { data: overlapping, error: overlapError } = await supabase
@@ -144,7 +152,7 @@ export async function POST(
     )
   }
 
-  // 3. Resolve slot duration — use provided value or fall back to doctor's default
+  // 4. Resolve slot duration — use provided value or fall back to doctor's default
   let resolvedSlotDuration = slot_duration_minutes
 
   if (resolvedSlotDuration === undefined) {
@@ -159,7 +167,7 @@ export async function POST(
     resolvedSlotDuration = settings?.default_slot_duration_minutes ?? 30
   }
 
-  // 4. Insert the new schedule block
+  // 5. Insert the new schedule block
   const { data, error } = await supabase
     .from("doctor_schedules")
     .insert({

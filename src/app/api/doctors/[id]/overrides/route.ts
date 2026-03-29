@@ -24,6 +24,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { checkDoctorPermission } from "@/lib/auth/check-doctor-permission"
 
 // ─── Validation Schemas ───────────────────────────────────────────
 
@@ -129,7 +130,14 @@ export async function POST(
 
   const supabase = await createClient()
 
-  // 3. Validate date is within the clinic's booking window.
+  // 3. Verify the caller has permission to create overrides for this doctor.
+  //    Admin can manage any doctor's overrides. A doctor can manage only their own.
+  const permission = await checkDoctorPermission(supabase, clinic_id, id)
+  if (!permission.authorized) {
+    return NextResponse.json({ error: permission.error }, { status: permission.status })
+  }
+
+  // 4. Validate date is within the clinic's booking window.
   //    Clinics configure how far ahead appointments can be booked
   //    (e.g., 60 days). Overrides beyond that window serve no purpose.
   const { data: clinic, error: clinicError } = await supabase
@@ -158,7 +166,7 @@ export async function POST(
     )
   }
 
-  // 4. Insert the override
+  // 5. Insert the override
   const { data, error } = await supabase
     .from("schedule_overrides")
     .insert({

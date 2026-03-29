@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { checkDoctorPermission } from "@/lib/auth/check-doctor-permission"
 
 // ─── Validation Schemas ───────────────────────────────────────────
 
@@ -75,6 +76,12 @@ export async function PUT(
 
   const supabase = await createClient()
 
+  // Verify the caller has permission to update this doctor's schedule.
+  const permission = await checkDoctorPermission(supabase, clinic_id, id)
+  if (!permission.authorized) {
+    return NextResponse.json({ error: permission.error }, { status: permission.status })
+  }
+
   // Update the row, filtering by scheduleId + doctor_id + clinic_id for safety.
   // This prevents updating a schedule block that doesn't belong to this doctor/clinic.
   const { error: updateError } = await supabase
@@ -120,6 +127,12 @@ export async function DELETE(
   }
 
   const supabase = await createClient()
+
+  // Verify the caller has permission to delete this doctor's schedule block.
+  const permission = await checkDoctorPermission(supabase, clinic_id, id)
+  if (!permission.authorized) {
+    return NextResponse.json({ error: permission.error }, { status: permission.status })
+  }
 
   const { error } = await supabase
     .from("doctor_schedules")

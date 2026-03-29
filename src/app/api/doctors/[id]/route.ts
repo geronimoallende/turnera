@@ -22,6 +22,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { checkDoctorPermission } from "@/lib/auth/check-doctor-permission"
 
 // ─── Validation Schemas ───────────────────────────────────────────
 
@@ -149,7 +150,17 @@ export async function PUT(
 
   const { clinic_id, first_name, last_name, specialty, license_number } = parsed.data
 
-  // 2. Check there's at least one field to update
+  const supabase = await createClient()
+
+  // 2. Verify the caller has permission to mutate this doctor's record.
+  //    Admin can always update any doctor. A doctor can only update their own record.
+  //    Secretaries are not allowed to update doctor profiles.
+  const permission = await checkDoctorPermission(supabase, clinic_id, id)
+  if (!permission.authorized) {
+    return NextResponse.json({ error: permission.error }, { status: permission.status })
+  }
+
+  // 3. Check there's at least one field to update
   const hasProfileUpdate = specialty !== undefined || license_number !== undefined
   const hasStaffUpdate = first_name !== undefined || last_name !== undefined
 
@@ -160,9 +171,7 @@ export async function PUT(
     )
   }
 
-  const supabase = await createClient()
-
-  // 3. Verify this doctor belongs to the requested clinic.
+  // 4. Verify this doctor belongs to the requested clinic.
   //    RLS would block the update anyway, but an explicit check gives a clearer error.
   const { data: settings } = await supabase
     .from("doctor_clinic_settings")
@@ -178,7 +187,7 @@ export async function PUT(
     )
   }
 
-  // 4. First, fetch the doctor to get their staff_id (needed to update `staff` table)
+  // 5. First, fetch the doctor to get their staff_id (needed to update `staff` table)
   const { data: doctorRow, error: fetchError } = await supabase
     .from("doctors")
     .select("staff_id")

@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { checkDoctorPermission } from "@/lib/auth/check-doctor-permission"
 
 // ─── Validation Schema ────────────────────────────────────────────
 
@@ -60,7 +61,14 @@ export async function PUT(
 
   const supabase = await createClient()
 
-  // 4. Update the settings row, filtered by both doctor_id and clinic_id.
+  // 4. Verify the caller is an admin — clinic settings are admin-only.
+  //    Doctors can adjust their own schedule/profile but not clinic-level config.
+  const permission = await checkDoctorPermission(supabase, clinic_id, id, true)
+  if (!permission.authorized) {
+    return NextResponse.json({ error: permission.error }, { status: permission.status })
+  }
+
+  // 5. Update the settings row, filtered by both doctor_id and clinic_id.
   //    This ensures you can only update settings for clinics you have access to (RLS).
   const { error: updateError } = await supabase
     .from("doctor_clinic_settings")
@@ -72,7 +80,7 @@ export async function PUT(
     return NextResponse.json({ error: updateError.message }, { status: 500 })
   }
 
-  // 5. Re-fetch the updated row to return the latest state
+  // 6. Re-fetch the updated row to return the latest state
   const { data, error } = await supabase
     .from("doctor_clinic_settings")
     .select(

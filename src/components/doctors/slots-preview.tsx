@@ -16,9 +16,11 @@ import { useAvailableSlots } from "@/lib/hooks/use-doctors"
 type Props = {
   doctorId: string
   clinicId: string
+  /** How many days ahead to allow date selection. Defaults to 60. */
+  maxBookingDaysAhead?: number
 }
 
-export function SlotsPreview({ doctorId, clinicId }: Props) {
+export function SlotsPreview({ doctorId, clinicId, maxBookingDaysAhead = 60 }: Props) {
   const [selectedDate, setSelectedDate] = useState<string>("")
   const { data, isLoading, error } = useAvailableSlots(
     doctorId,
@@ -28,10 +30,10 @@ export function SlotsPreview({ doctorId, clinicId }: Props) {
 
   const slots = data?.data ?? []
 
-  // Date range: today to +60 days
+  // Date range: today to +maxBookingDaysAhead days
   const today = new Date().toISOString().split("T")[0]
   const maxDate = new Date()
-  maxDate.setDate(maxDate.getDate() + 60)
+  maxDate.setDate(maxDate.getDate() + maxBookingDaysAhead)
   const maxDateStr = maxDate.toISOString().split("T")[0]
 
   return (

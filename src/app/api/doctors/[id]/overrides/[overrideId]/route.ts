@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { checkDoctorPermission } from "@/lib/auth/check-doctor-permission"
 
 // ─── DELETE: Delete an override ───────────────────────────────────
 
@@ -30,6 +31,12 @@ export async function DELETE(
   }
 
   const supabase = await createClient()
+
+  // Verify the caller has permission to delete this doctor's override.
+  const permission = await checkDoctorPermission(supabase, clinic_id, id)
+  if (!permission.authorized) {
+    return NextResponse.json({ error: permission.error }, { status: permission.status })
+  }
 
   const { error } = await supabase
     .from("schedule_overrides")

@@ -91,9 +91,8 @@ export async function GET(request: NextRequest) {
     }
 
     return {
-      // doctor_clinic_settings fields
-      id: row.id,                                      // settings row UUID
-      doctor_id: row.doctor_id,                        // doctors table UUID
+      // Use doctors.id as the primary identifier — the UI navigates to /doctors/[id]
+      id: doctor.id,                                   // doctors table UUID
       staff_id: doctor.staff_id,                       // staff table UUID
       is_active: row.is_active,
       consultation_fee: row.consultation_fee,
