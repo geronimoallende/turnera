@@ -373,6 +373,8 @@ export type Database = {
           id: string
           is_active: boolean | null
           logo_url: string | null
+          max_booking_days_ahead: number
+          min_booking_hours_ahead: number
           n8n_webhook_secret: string | null
           n8n_webhook_url: string | null
           name: string
@@ -395,6 +397,8 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           logo_url?: string | null
+          max_booking_days_ahead?: number
+          min_booking_hours_ahead?: number
           n8n_webhook_secret?: string | null
           n8n_webhook_url?: string | null
           name: string
@@ -417,6 +421,8 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           logo_url?: string | null
+          max_booking_days_ahead?: number
+          min_booking_hours_ahead?: number
           n8n_webhook_secret?: string | null
           n8n_webhook_url?: string | null
           name?: string
