@@ -1,668 +1,531 @@
-# Turnera - Medical Appointment Scheduling System
+# Turnera — Engineering Plan v2
 
-## Context
+> **Last updated**: 2026-04-01
+> **Supersedes**: Original plan (feature-only, 12 tables, n8n, no observability)
+> **Design spec**: `docs/superpowers/specs/2026-04-01-engineering-plan-v2-design.md`
 
-Althem Group needs a SaaS appointment scheduling system ("turnera") for medical offices. The system must handle appointment CRUD, patient CRM, multi-doctor schedules, automated reminders, chatbot integration (n8n), and analytics — all in a single-page dashboard experience. This builds on Althem's existing infrastructure: Supabase (same project as chatbot SaaS), n8n on EasyPanel, and Vercel for hosting.
-
-**Key decisions:**
-- **SaaS multi-tenant** from the start (`clinic_id` isolation via junction tables)
-- **Clinic-owned patients**: each clinic owns their patient records independently in `clinic_patients` (no global patient table). DNI is unique per clinic, not globally.
-- **Global doctors** with per-clinic metadata via junction tables (a doctor can work at multiple clinics)
-- **Per-clinic blacklist**: no-show tracking is per-clinic, Clinic A's blacklist doesn't affect Clinic B
-- **Custom calendar in Supabase** (waitlists, overbooking, CRM integration, chatbot queries). Google Calendar sync deferred to Phase 4.
-- **Same Supabase project** (`nzozdrakzqhvvmdgkqjh.supabase.co`) alongside existing chatbot tables
-- **Next.js 14+ App Router** + shadcn/ui + Tailwind CSS + FullCalendar
-- **Staff-only auth**: Only admin, doctor, secretary log in. No patient accounts.
-- **One n8n workflow per clinic**: Isolated failures, per-clinic WhatsApp numbers, per-clinic customization
-- **Payments marked by secretary/admin only**: Doctors see payment status read-only
-- **No reports_cache table**: Reports computed on-the-fly (modest data volumes, simple aggregates)
-- **Deployment**: GitHub commits → Vercel auto-deploy
+Informed by 33 deep research sessions, UPCN legacy system analysis (61 screenshots + field visit), and web research on medical SaaS best practices.
 
 ---
 
-## Tech Stack
+## 1. Context & Strategic Principles
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui |
-| Calendar UI | @fullcalendar/react (day/week/month views, drag-drop) |
-| Forms | react-hook-form + zod |
-| Charts | recharts |
-| PDF Export | @react-pdf/renderer |
-| Database | Supabase (PostgreSQL + RLS + Realtime) |
-| Auth | Supabase Auth (email/password) + custom staff roles via `staff_clinics` |
-| Chatbot | n8n workflows — one per clinic (CB-6 Appointment Manager, CB-7 Reminder Dispatcher) |
-| Hosting | Vercel (frontend) + existing Supabase + existing n8n EasyPanel VPS |
-| Dates | date-fns + date-fns-tz (Argentina timezone UTC-3) |
+**Turnera** is a multi-tenant medical appointment scheduling SaaS built by Althem Group. First client: UPCN (5,327 patients, 20+ doctors, 84 insurance plans). The system replaces a legacy web app running on `10.11.12.250` with broken financial tracking, no duplicate prevention, and minimal clinical history.
+
+**Strategic principles:**
+
+1. **Secretary-first UX** — Every booking must complete in <30 seconds. 2-week adoption window.
+2. **WhatsApp is THE patient channel** — 93% penetration, 98% open rate. No web booking portal for MVP.
+3. **Compliance from Day 1** — Ley 25.326 + Ley 26.529 + Disposicion 11/2006. Health data = CRITICAL level. 10-year retention. Audit trails legally mandatory.
+4. **Fix the rendicion** — Order numbers linked to coseguro amounts via FK. No more hand-tracking.
+5. **Offline-aware architecture** — 47% of Argentine clinics have unstable internet. Design patterns from Day 1, PWA later.
+6. **No integrated competitor** — Turnos + PACS + obras sociales + AI dictation + patient portal = the moat.
+
+**Key architecture decisions:**
+- Multi-tenant via `clinic_id` + RLS
+- Clinic-owned patients (no global table, DNI unique per clinic) — ADR-011
+- Staff-only auth (admin/doctor/secretary). Patients never log in — ADR-003
+- Python/FastAPI for AI/WhatsApp/reminders (supersedes n8n) — ADR-012
+- Database triggers as source of truth for both Next.js and FastAPI
+
+**Supabase project:** `lavfzixecvbvdqxyiwwl`
 
 ---
 
-## Database Schema (Supabase) — 12 Tables
+## 2. Tech Stack
 
-All tables coexist with existing chatbot tables. Multi-tenant isolation via `clinic_id` + RLS.
+| Layer | Technology | Notes |
+|-------|-----------|-------|
+| **Framework** | Next.js 16 (App Router) + TypeScript strict | Verify CVE-2025-29927 patch |
+| **UI** | shadcn/ui + Tailwind CSS 4 + Lucide icons | Blue/white flat design |
+| **Calendar** | @fullcalendar/react 6.x | Day/week/month |
+| **Forms** | react-hook-form + zod | |
+| **Data Fetching** | React Query v5 | Offline persistence via `persistQueryClient` |
+| **Charts** | recharts | |
+| **PDF** | @react-pdf/renderer | |
+| **Dates** | date-fns + date-fns-tz | TZ: America/Argentina/Buenos_Aires |
+| **Toasts** | Sonner | |
+| **Database** | Supabase (PostgreSQL + RLS + Auth + Realtime) | Pro + PITR for production |
+| **AI Backend** | FastAPI + LangChain (Hetzner VPS, Docker) | `turnera-ai/` in this repo |
+| **Task Queue** | Celery + Redis | Reminders, async |
+| **RAG** | pgvector in Supabase + LangChain | Clinic-scoped |
+| **WhatsApp** | YCloud BSP → FastAPI webhook | BSUID-ready (June 2026) |
+| **Observability** | Sentry + OpenTelemetry + Grafana Cloud | From Day 1 |
+| **Logging** | Pino (Next.js) + structlog (Python) | Structured JSON |
+| **Rate Limiting** | @upstash/ratelimit + Upstash Redis | Edge, per-tenant |
+| **Testing** | pgTAP + Vitest + Playwright + k6 | 4 layers |
+| **CI/CD** | GitHub Actions | lint → typecheck → test → migrate → deploy |
+| **Hosting** | Vercel + Hetzner VPS + Supabase | 3 environments |
+| **Offline** | React Query persistence + Serwist (Phase 3) | Architecture-ready Day 1 |
 
-### Architecture: Global Entities + Per-Clinic Data
+---
+
+## 3. Architecture & Cross-Cutting Concerns
+
+### 3.1 Environment Strategy
+
+| | Development | Staging | Production |
+|---|---|---|---|
+| Frontend | localhost:3000 | Vercel Preview | Vercel Production |
+| Database | `supabase start` | Supabase Branch | Supabase Main |
+| Python API | localhost:8000 | VPS staging container | VPS prod container |
+| Data | Seed script | Anonymized prod copy | Real data |
+| Secrets | .env.local | Vercel env vars | Vercel env vars |
+
+All migrations in `supabase/migrations/`. Never develop against production.
+
+### 3.2 CI/CD Pipeline
 
 ```
-┌─────────────────────────────────────────────────────┐
-│ GLOBAL (shared across clinics)                      │
-│   staff (identity: auth_user_id, name, email)       │
-│   doctors (specialty, license_number)               │
-├─────────────────────────────────────────────────────┤
-│ JUNCTION (per-clinic metadata for global entities)  │
-│   staff_clinics (role per clinic)                   │
-│   doctor_clinic_settings (fee, slots, overbooking)  │
-├─────────────────────────────────────────────────────┤
-│ PER-CLINIC (always have clinic_id)                  │
-│   clinics, clinic_patients, appointments,           │
-│   doctor_schedules, schedule_overrides, waitlist,   │
-│   reminders, appointment_history                    │
-└─────────────────────────────────────────────────────┘
+PR opened/pushed:
+  ├── [parallel] ESLint + TypeScript typecheck
+  ├── [parallel] Vitest + pgTAP tests
+  ├── [sequential] Supabase branch → migrations → Vercel preview
+  └── [sequential] Playwright E2E against preview
+
+PR merged to main:
+  ├── supabase db push (production migration)
+  ├── Health check
+  ├── Vercel production deploy
+  └── Sentry release + source maps
+
+Rollback: new reverse migration (never edit applied). Vercel instant rollback. PITR as last resort.
 ```
 
-> **Note:** There is no global `patients` table. Each clinic owns their patient records directly in `clinic_patients`. If a patient visits two clinics, they exist as two separate records. See `docs/decisions/011-clinic-owned-patients.md`.
+### 3.3 Observability (Day 1)
 
-### Table Details
+```
+Browser ──→ Vercel (Next.js) ──→ Supabase ←── FastAPI (VPS)
+  │              │                                │
+  │         @sentry/nextjs                   sentry-sdk
+  │         @vercel/otel                     otel-fastapi
+  │              │                                │
+  │              └──→ OTel Collector ◄────────────┘
+  │                     │
+  │              ┌──────┼──────────┐
+  │              ▼      ▼          ▼
+  │            Tempo   Loki    Prometheus
+  │           (traces) (logs)  (metrics)
+  │              └──────┼──────────┘
+  │                     ▼
+  │                  Grafana
+  │
+  └──→ Sentry (errors + performance + releases)
+```
 
-#### 1. `clinics` — Tenant Configuration
+| Signal | What | Tool |
+|--------|------|------|
+| Errors | Unhandled exceptions, failed API calls | Sentry |
+| Traces | Full request lifecycle across services | OTel → Tempo |
+| Metrics | API latency p50/p95/p99, error rates | OTel → Prometheus |
+| Logs | Structured JSON with requestId, clinicId | Pino/structlog → Loki |
+| Business | Appointments/day, no-show rate, active clinics | Custom → Grafana |
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID PK | |
-| name | TEXT NOT NULL | Display name |
-| address | TEXT | Shown in reminders |
-| phone, email | TEXT | Clinic contact |
-| timezone | TEXT DEFAULT 'America/Argentina/Buenos_Aires' | All times in clinic's local TZ |
-| business_hours | JSONB | `{"mon": {"start":"08:00","end":"20:00"}, "sun": null}` |
-| cancellation_policy_hours | INTEGER DEFAULT 24 | Late cancellation threshold |
-| cancellation_fee_amount | DECIMAL | Fee for late cancellation |
-| chatbot_client_id | UUID FK → client_config | Link to existing chatbot SaaS |
-| n8n_webhook_url | TEXT | Per-clinic n8n endpoint |
-| **WhatsApp (Embedded Signup)** | | |
-| whatsapp_number | TEXT | Per-clinic WhatsApp number |
-| whatsapp_phone_number_id | TEXT | Meta API: identifies the connected number |
-| whatsapp_waba_id | TEXT | Meta API: WhatsApp Business Account ID |
-| whatsapp_business_id | TEXT | Meta API: Meta Business Portfolio ID |
-| whatsapp_connected_at | TIMESTAMPTZ | When Embedded Signup was completed |
-| whatsapp_status | ENUM (not_connected/connected/disconnected) DEFAULT 'not_connected' | Connection state |
-| logo_url | TEXT | Dashboard header + PDF exports |
-| created_at, updated_at | TIMESTAMPTZ | |
+**Alerts:** error rate >5% (5min), p99 >3s, auth spike >10/min, zero bookings 2h during business hours, WhatsApp >20% failures.
 
-#### 2. `staff` — Global Staff Identity
+### 3.4 Error Handling Architecture
 
-No `clinic_id` or `role` here — those live in `staff_clinics`.
+- `withErrorHandler(handler)` — single wrapper for all API routes. Handles logging, error classification, requestId, Sentry capture.
+- Consistent responses: `{ error, code, requestId }`
+- `global-error.tsx` + per-route `error.tsx` with retry + auto Sentry report
+- React Query: 1 retry for network errors, 0 for 4xx
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID PK | |
-| auth_user_id | UUID UNIQUE FK → auth.users | Links to Supabase Auth |
-| full_name | TEXT NOT NULL | |
-| email | TEXT NOT NULL | |
-| phone | TEXT | |
-| is_active | BOOLEAN DEFAULT true | Global soft-delete |
-| created_at, updated_at | TIMESTAMPTZ | |
+### 3.5 Security Model
 
-#### 3. `staff_clinics` — **NEW** Junction: Staff ↔ Clinic + Role
+1. **Transport**: HTTPS + security headers (CSP nonce-based, HSTS, X-Frame-Options DENY)
+2. **Auth**: Supabase Auth, JWT httpOnly cookies, session refresh per request, `clinic_id` from JWT only
+3. **Authorization**: RLS + `checkDoctorPermission()` + triggers. pgTAP tests in CI
+4. **Rate Limiting**: `@upstash/ratelimit` in edge middleware. Login: 5/min by IP. Reads: 100/min. Writes: 30/min
+5. **Validation**: Zod on every route. Parameterized queries (no SQL injection)
+6. **Secrets**: `.env.local` dev only. Vercel encrypted for staging/prod. `service_role` only in `admin.ts`
 
-A staff member can work at multiple clinics with different roles.
+### 3.6 Testing Strategy
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID PK | |
-| staff_id | UUID FK → staff | |
-| clinic_id | UUID FK → clinics | |
-| role | ENUM (admin/doctor/secretary) | Role at THIS clinic |
-| is_active | BOOLEAN DEFAULT true | Per-clinic soft-delete |
-| created_at | TIMESTAMPTZ | |
-| **UNIQUE** | (staff_id, clinic_id) | One role per clinic |
+| Layer | Tool | Tests | CI |
+|-------|------|-------|-----|
+| Database | pgTAP | RLS (17 tables), triggers, functions | Every PR |
+| API | Vitest | Routes with admin/doctor/secretary/unauth contexts | Every PR |
+| E2E | Playwright | Critical flows (booking, auth, rendicion) | Every PR |
+| Load | k6 | Concurrent bookings, slot calculation | Pre-release |
 
-#### 4. `doctors` — Global Doctor Profile
+### 3.7 Performance Budgets
 
-Only doctor-specific identity data. Per-clinic config lives in `doctor_clinic_settings`.
+| Metric | Target |
+|--------|--------|
+| Booking flow (click to confirmed) | < 3s |
+| API p95 | < 500ms |
+| API p99 | < 1.5s |
+| `get_available_slots` RPC | < 200ms |
+| LCP | < 2.5s |
+| TTI | < 3.5s |
+| Calendar render (week, 5 doctors) | < 1s |
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID PK | |
-| staff_id | UUID UNIQUE FK → staff | |
-| specialty | TEXT NOT NULL | "Cardiology", "Dermatology" |
-| license_number | TEXT NOT NULL | Matricula |
-| virtual_enabled | BOOLEAN DEFAULT false | Offers video consultations? |
-| virtual_link | TEXT | Zoom/Meet URL |
-| created_at, updated_at | TIMESTAMPTZ | |
+### 3.8 Legal Compliance
 
-#### 5. `doctor_clinic_settings` — **NEW** Per-Clinic Doctor Config
+**Audit trails (Ley 26.529):**
+- `appointment_history` — existing, immutable log
+- `patient_history` — **NEW** (migration 017), immutable log for all `clinic_patients` changes
+- Insert-only. No UPDATE/DELETE policies. 10-year retention.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID PK | |
-| doctor_id | UUID FK → doctors | |
-| clinic_id | UUID FK → clinics | |
-| default_slot_duration_minutes | INTEGER DEFAULT 30 | |
-| max_daily_appointments | INTEGER | null = unlimited |
-| allows_overbooking | BOOLEAN DEFAULT false | |
-| max_overbooking_slots | INTEGER | |
-| consultation_fee | DECIMAL(10,2) | |
-| is_active | BOOLEAN DEFAULT true | |
-| created_at, updated_at | TIMESTAMPTZ | |
-| **UNIQUE** | (doctor_id, clinic_id) | |
+**Disposicion 11/2006:** `docs/compliance/personal-data-security-document.md` before production.
 
-#### 6. `clinic_patients` — Per-Clinic Patient Records
+**Encryption:** AES-256 at rest (Supabase), TLS 1.2+ in transit, encrypted columns for clinic secrets.
 
-Each clinic owns their patient records independently. There is NO global patient table. If a patient visits two clinics, they exist as two separate records. DNI is unique per clinic, not globally.
+### 3.9 Backup & Disaster Recovery
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID PK | |
-| clinic_id | UUID FK → clinics | |
-| **Identity** | | |
-| first_name | TEXT NOT NULL | |
-| last_name | TEXT NOT NULL | |
-| dni | TEXT | National ID |
-| phone | TEXT | |
-| email | TEXT | |
-| whatsapp_phone | TEXT | For chatbot matching |
-| date_of_birth | DATE | |
-| gender | TEXT | |
-| blood_type | TEXT | |
-| allergies | TEXT | |
-| is_active | BOOLEAN DEFAULT true | Soft-delete |
-| **Blacklist** | | |
-| blacklist_status | ENUM (none/warned/blacklisted) DEFAULT 'none' | Per-clinic! |
-| no_show_count | INTEGER DEFAULT 0 | Auto-incremented by trigger |
-| **Insurance** | | |
-| insurance_provider | TEXT | "OSDE", "Swiss Medical" |
-| insurance_plan | TEXT | "OSDE 210" |
-| insurance_member_number | TEXT | |
-| **CRM** | | |
-| patient_type | TEXT | regular/vip/new/referred |
-| frequency | TEXT | weekly/monthly/occasional |
-| priority | TEXT | |
-| financial_status | TEXT | up_to_date/pending/overdue |
-| tags | TEXT[] DEFAULT '{}' | ['conflictive', 'prefers_afternoon'] |
-| notes | TEXT | Secretary notes about this patient |
-| created_at, updated_at | TIMESTAMPTZ | |
-| **UNIQUE** | (clinic_id, dni) | DNI unique per clinic only |
+| RPO | < 1 minute (PITR) |
+|-----|-----|
+| RTO | < 1 hour |
+| Retention | 10 years (legal) |
 
-#### 7. `doctor_schedules` — Weekly Recurring Availability (Per-Clinic)
+PITR on Supabase Pro. Quarterly restore tests. Yearly cold storage archive for audit tables.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID PK | |
-| doctor_id | UUID FK → doctors | |
-| clinic_id | UUID FK → clinics | Schedule is per-doctor-per-clinic |
-| day_of_week | SMALLINT CHECK (0-6) | 0=Sunday |
-| start_time, end_time | TIME | CHECK (end > start) |
-| slot_duration_minutes | INTEGER DEFAULT 30 | |
-| is_active | BOOLEAN DEFAULT true | |
-| valid_from | DATE DEFAULT CURRENT_DATE | |
-| valid_until | DATE | null = indefinite |
-| created_at | TIMESTAMPTZ | |
+### 3.10 Offline-Aware Architecture
 
-#### 8. `schedule_overrides` — One-Off Exceptions (Per-Clinic)
+**Phase 1:** React Query `gcTime: Infinity` for critical data. Optimistic mutations. requestId for idempotency.
+
+**Phase 3:** Serwist service worker. `persistQueryClient` → IndexedDB. Mutation queue. Never cache patient PII offline. Server timestamp wins conflicts.
+
+### 3.11 Data Migration (UPCN)
+
+**A. Profile** → export, analyze quality, map fields
+**B. Transform** → DNI strip dots, phones to +54, map 84 insurance plans, map 18 prestaciones
+**C. Parallel run** → 1-2 weeks both systems, daily validation
+**D. Cutover** → delta import, legacy read-only, retain 10 years
+
+### 3.12 Cost Projection
+
+| Service | Phase 1 (1 clinic) | Phase 2 (5) | Phase 3 (10+) |
+|---------|-------------------|-------------|---------------|
+| Supabase Pro + PITR | $35/mo | $35/mo | $35/mo |
+| Vercel Pro | $20/mo | $20/mo | $20/mo |
+| Hetzner VPS | $5/mo | $10/mo | $20/mo |
+| Sentry | $0 | $0 | $26/mo |
+| Grafana Cloud | $0 | $0 | $0 |
+| Upstash Redis | $0 | $0 | $10/mo |
+| WhatsApp (YCloud) | $5/mo | $25/mo | $50/mo |
+| Claude API (LLM) | $10/mo | $30/mo | $60/mo |
+| **Total** | **~$75/mo** | **~$120/mo** | **~$221/mo** |
+
+---
+
+## 4. Database Schema (17 Tables)
+
+### Architecture
+
+```
+GLOBAL:     staff, doctors
+JUNCTION:   staff_clinics, doctor_clinic_settings
+PER-CLINIC: clinics, clinic_patients, appointments, doctor_schedules,
+            schedule_overrides, waitlist, reminders, appointment_history,
+            patient_history (NEW), clinic_faqs, clinic_services,
+            document_embeddings, conversation_sessions
+```
+
+### New: `patient_history` (Table 17 — Legal Compliance)
 
 | Column | Type | Notes |
 |--------|------|-------|
 | id | UUID PK | |
-| doctor_id | UUID FK → doctors | |
-| clinic_id | UUID FK → clinics | |
-| override_date | DATE NOT NULL | |
-| start_time, end_time | TIME | null = entire day |
-| override_type | ENUM (block/available) | block=not available, available=extra hours |
-| reason | TEXT | "Vacation", "Conference" |
-| created_at | TIMESTAMPTZ | |
-
-#### 9. `appointments` — Core Table
-
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID PK | |
-| clinic_id | UUID FK → clinics | |
-| doctor_id | UUID FK → doctors | |
 | patient_id | UUID FK → clinic_patients | |
-| appointment_date | DATE NOT NULL | Separate from time for indexing |
-| start_time, end_time | TIME NOT NULL | |
-| duration_minutes | INTEGER NOT NULL | |
-| **Status** | | |
-| status | ENUM (scheduled/confirmed/arrived/in_progress/completed/no_show/cancelled_patient/cancelled_doctor/rescheduled) DEFAULT 'scheduled' | |
-| modality | ENUM (in_person/virtual) DEFAULT 'in_person' | |
-| source | ENUM (web/phone/whatsapp/chatbot/walk_in/manual) DEFAULT 'manual' | How it was created |
-| **Details** | | |
-| reason | TEXT | "Checkup", "Follow-up" |
-| doctor_notes | TEXT | Doctor's notes |
-| internal_notes | TEXT | Secretary notes |
-| pre_consultation_instructions | TEXT | "Come fasting" |
-| **Confirmation/Reminders** | | |
-| confirmation_sent_at | TIMESTAMPTZ | |
-| confirmed_at | TIMESTAMPTZ | |
-| reminder_24h_sent_at | TIMESTAMPTZ | |
-| reminder_sameday_sent_at | TIMESTAMPTZ | |
-| **Flags** | | |
-| is_overbooking | BOOLEAN DEFAULT false | Overlap trigger skips validation |
-| is_emergency | BOOLEAN DEFAULT false | Red indicator on calendar |
-| **Recurrence** | | |
-| recurrence_rule | TEXT | "every 3 months" |
-| recurrence_parent_id | UUID FK → appointments | |
-| **Cancellation** | | |
-| cancelled_at | TIMESTAMPTZ | |
-| cancellation_reason | TEXT | |
-| cancellation_fee_applied | BOOLEAN DEFAULT false | |
-| rescheduled_to_id | UUID FK → appointments | |
-| rescheduled_from_id | UUID FK → appointments | |
-| **Billing — writable only by admin/secretary (enforced by trigger)** | | |
-| payment_status | ENUM (pending/paid/partial/waived) DEFAULT 'pending' | |
-| payment_updated_by | UUID FK → staff | Audit: who changed payment |
-| payment_updated_at | TIMESTAMPTZ | |
-| is_invoiced | BOOLEAN DEFAULT false | |
-| invoice_number | TEXT | |
-| insurance_auth_status | TEXT | pending/approved/denied/not_required |
-| **Timestamps** | | |
-| checked_in_at | TIMESTAMPTZ | When patient arrived |
-| started_at | TIMESTAMPTZ | When consultation began |
-| completed_at | TIMESTAMPTZ | When consultation ended |
-| created_by | UUID FK → staff | |
-| created_at, updated_at | TIMESTAMPTZ | |
-
-**Indexes**: (clinic_id, appointment_date), (doctor_id, appointment_date), (patient_id)
-
-#### 10. `waitlist`
-
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID PK | |
-| clinic_id | UUID FK → clinics | |
-| patient_id | UUID FK → clinic_patients | |
-| doctor_id | UUID FK → doctors | null = any doctor |
-| preferred_date_start/end | DATE | |
-| preferred_time_start/end | TIME | |
-| urgency | ENUM (urgent/standard/flexible) | |
-| status | ENUM (waiting/offered/booked/expired/cancelled) DEFAULT 'waiting' | |
-| offered_appointment_id | UUID FK → appointments | |
-| created_at, updated_at | TIMESTAMPTZ | |
-
-#### 11. `appointment_history` — Immutable Audit Log
-
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID PK | |
-| appointment_id | UUID FK → appointments | |
-| clinic_id | UUID FK → clinics | Denormalized for RLS performance |
-| action | TEXT NOT NULL | 'created', 'confirmed', 'cancelled', etc. |
-| old_values, new_values | JSONB | Snapshot of changes |
-| performed_by | UUID FK → staff | null = system/chatbot |
-| performed_by_source | TEXT | 'web_app', 'chatbot', 'n8n', 'system' |
+| clinic_id | UUID FK → clinics | Denormalized for RLS |
+| action | TEXT NOT NULL | created/updated/deleted |
+| old_values | JSONB | null on create |
+| new_values | JSONB | null on delete |
+| changed_fields | TEXT[] | Quick scan without diffing |
+| performed_by | UUID FK → staff | |
+| performed_by_role | TEXT | Role at time of change |
+| ip_address | TEXT | |
 | created_at | TIMESTAMPTZ | |
 
-#### 12. `reminders` — Communication Tracking
+RLS: SELECT only. No UPDATE/DELETE. Trigger: AFTER INSERT/UPDATE/DELETE on `clinic_patients`.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID PK | |
-| appointment_id | UUID FK → appointments | |
-| clinic_id | UUID FK → clinics | |
-| patient_id | UUID FK → clinic_patients | |
-| reminder_type | ENUM (confirmation_request/reminder_24h/reminder_sameday/post_consultation) | |
-| channel | ENUM (whatsapp/email/sms) | |
-| status | ENUM (pending/sent/delivered/read/failed) | |
-| response | ENUM (confirmed/cancelled/rescheduled) | Patient's reply |
-| sent_at, delivered_at | TIMESTAMPTZ | |
-| created_at | TIMESTAMPTZ | |
+### Schema Changes to Existing Tables
 
-### Why No `reports_cache` Table
+**`clinics`**: + `whatsapp_bsp_provider`, `whatsapp_bsp_api_key`, `whatsapp_bsuid_enabled`
 
-Reports are simple aggregates over modest data volumes:
-- A busy clinic: ~100 appointments/day, ~3000/month
-- Queries like `COUNT(*) FILTER (WHERE status = 'no_show')` run in milliseconds
-- Caching adds staleness and complexity for no benefit at this scale
-- If needed later (hundreds of clinics), add materialized views then
+**`clinic_patients`**: + `whatsapp_bsuid` (Meta BSUID, June 2026)
+
+**`appointments`**: + `is_entreturno` (squeeze-in), `coseguro_amount`, `order_number` (rendicion FK)
+
+**`appointment_status` enum**: + `otorgado` (pre-confirmation), `cancelled_clinic` (by medical center)
+
+Status flow: `otorgado → confirmed → arrived → in_progress → completed/no_show`. Cancel branches: `cancelled_patient`, `cancelled_doctor`, `cancelled_clinic`, `rescheduled`.
+
+### New Functions
+
+- `get_rendicion_summary(clinic_id, doctor_id, date_start, date_end)` — proper FK reconciliation
+- `get_available_slots` updated — `can_entreturno` flag, respects `allows_overbooking`
+
+### Migrations
+
+1. `supabase db pull` → `001_baseline.sql` (commit existing schema)
+2. `017_create_patient_history.sql`
+3. `018_add_entreturno_rendicion.sql`
+4. `019_add_bsuid_fields.sql`
+5. `020_create_rendicion_function.sql`
 
 ---
 
-### Database Functions
+## 5. Implementation Phases
 
-#### `get_user_clinic_ids()` — Returns all clinics the current user belongs to
-```sql
-CREATE OR REPLACE FUNCTION get_user_clinic_ids()
-RETURNS UUID[] AS $$
-  SELECT ARRAY(
-    SELECT sc.clinic_id FROM staff_clinics sc
-    JOIN staff s ON s.id = sc.staff_id
-    WHERE s.auth_user_id = auth.uid() AND sc.is_active = true
-  );
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
-```
+### Phase 1: Core MVP (Weeks 1-6)
 
-#### `get_user_role(p_clinic_id)` — Returns user's role at a specific clinic
-```sql
-CREATE OR REPLACE FUNCTION get_user_role(p_clinic_id UUID)
-RETURNS staff_role AS $$
-  SELECT sc.role FROM staff_clinics sc
-  JOIN staff s ON s.id = sc.staff_id
-  WHERE s.auth_user_id = auth.uid()
-    AND sc.clinic_id = p_clinic_id AND sc.is_active = true;
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
-```
+**Week 1: Foundation + Observability** (partially done)
 
-#### `get_available_slots(doctor_id, date, clinic_id)` — Slot availability
-1. Looks up `doctor_schedules` for that day_of_week + clinic_id
-2. Generates time slots via `generate_series`
-3. Subtracts `schedule_overrides` (blocks)
-4. Subtracts existing `appointments` (booked, not cancelled)
-5. Returns: `slot_start`, `slot_end`, `is_available`, `existing_appointment_id`
+- [x] Next.js + Supabase + Auth + Login + Seed
+- [ ] Pull migrations to git (`001_baseline.sql`)
+- [ ] Sentry (`@sentry/nextjs`)
+- [ ] Pino logger
+- [ ] `instrumentation.ts` (OTel)
+- [ ] Error boundaries (`global-error.tsx`, `error.tsx`)
+- [ ] `withErrorHandler()` wrapper
+- [ ] Security headers + CVE-2025-29927 check
+- [ ] Migration 017: `patient_history`
 
-#### `check_appointment_overlap()` — Trigger
-Runs BEFORE INSERT/UPDATE on `appointments`. Raises error if overlap exists for same doctor+clinic+date — unless `is_overbooking = true`.
+**Week 2: Patients** ✅ DONE
+**Week 3: Doctors** ✅ DONE
 
-#### `check_payment_update()` — Trigger
-Runs BEFORE UPDATE on `appointments`. If `payment_status` changed, verifies the user is admin or secretary. Auto-fills `payment_updated_by` and `payment_updated_at`.
+**Week 4: Appointments + FullCalendar** ← NEXT
 
-#### `update_no_show_count()` — Trigger
-Runs AFTER UPDATE on `appointments`. When status changes to `no_show`, increments `clinic_patients.no_show_count` for that patient record.
+- [ ] Migration 018: entreturno + rendicion + status enum
+- [ ] Appointment CRUD API
+- [ ] `get_available_slots` with entreturno
+- [ ] FullCalendar: day (multi-doctor), week, month
+- [ ] Quick booking side panel (< 3s target)
+- [ ] Status workflow (otorgado → ... → completed)
+- [ ] DNI search + inline new-patient in booking
+- [ ] Entreturno squeeze-in button
+- [ ] Duplicate booking prevention
+- [ ] Realtime on appointments
+- [ ] Playwright E2E booking flow
 
-### RLS Policies
+**Week 5: Dashboard + Reports + Rendicion**
 
-All RLS policies use `clinic_id = ANY(get_user_clinic_ids())` for multi-clinic support.
+- [ ] Dashboard: agenda, stats, alerts
+- [ ] Payment marking (secretary/admin)
+- [ ] Rendicion UI + `get_rendicion_summary()`
+- [ ] Coseguro/order entry at arrival
+- [ ] Reports: attendance, revenue, insurance, no-shows
+- [ ] PDF export
+- [ ] Doctor morning briefing
 
-**Key patterns:**
-- `clinics`: SELECT where `id = ANY(get_user_clinic_ids())`. UPDATE only if `get_user_role(id) = 'admin'`
-- `staff`: SELECT where staff shares any clinic with current user
-- `staff_clinics`: SELECT/INSERT/UPDATE restricted to user's clinics, writes require admin role
-- `clinic_patients`: Filtered by `clinic_id`. Writes require admin/secretary role. Doctors read-only.
-- `appointments`: SELECT filtered by `clinic_id`. INSERT by admin/secretary or doctor (own appointments). Payment updates enforced by trigger.
-- `appointment_history`, `reminders`, `waitlist`: Filtered by `clinic_id`
-- **n8n**: Uses `service_role` key (bypasses RLS)
+**Week 6: Testing + CI/CD + Security**
 
-### Realtime
-- Enable Supabase Realtime on: `appointments` (INSERT/UPDATE/DELETE), `waitlist` (INSERT/UPDATE)
+- [ ] pgTAP: RLS (17 tables) + triggers + functions
+- [ ] Vitest: all API routes
+- [ ] GitHub Actions pipeline
+- [ ] Supabase Branching (staging)
+- [ ] Rate limiting
+- [ ] Grafana dashboards
+- [ ] Performance benchmark
+- [ ] Compliance document
+
+**Exit criteria:** Full appointment lifecycle, rendicion, entreturnos, tested CI, Sentry + Grafana, staging, booking p95 < 3s.
 
 ---
 
-## Project Structure
+### Phase 2: Communications & WhatsApp (Weeks 7-10)
+
+**Week 7:** FastAPI skeleton in `turnera-ai/` — Sentry, OTel, structlog, Docker, CI/CD
+**Week 8:** WhatsApp (YCloud BSP, delivery tracking, retry, fallback, Celery reminders, BSUID schema)
+**Week 9:** LangChain agent (9 tools, two-tier LLM, RAG, conversation memory, bot-to-human handoff)
+**Week 10:** Waitlist + blacklist + cancellation policy + E2E + load test
+
+**Exit criteria:** WhatsApp booking/cancel/confirm, reminders, delivery tracking, RAG, distributed tracing, handoff.
+
+---
+
+### Phase 3: CRM, Offline, Optimization (Weeks 11-14)
+
+**Week 11:** Patient CRM (history, family, tags, timeline, bulk ops)
+**Week 12:** Reports (custom ranges, recurring appointments, CSV/PDF, Grafana business metrics)
+**Week 13:** Offline PWA (Serwist, IndexedDB, mutation queue, graceful degradation)
+**Week 14:** AutoResearch optimization + mobile + accessibility + performance audit
+
+**Exit criteria:** CRM, reports, PWA offline read-only, chatbot optimized, mobile + a11y.
+
+---
+
+### Phase 4: Production Readiness (Weeks 15-17)
+
+**Week 15:** UPCN data migration (profile, transform, parallel run, secretary training, cutover)
+**Week 16:** Multi-clinic onboarding (wizard, per-clinic RAG, WhatsApp, Grafana per-tenant)
+**Week 17:** Hardening (DR test, runbooks, archival, security audit, AAIP, load test 10 clinics)
+
+**Exit criteria:** UPCN live, 1+ additional clinic, DR tested, load-tested.
+
+---
+
+### Phase 5: Sanatorio Module (TBD — after Cittadino meeting)
+
+Research complete (33 sessions). Build when infrastructure/budget confirmed.
+
+- **5.1** Patient Flow (queue, wait times, doctor call)
+- **5.2** PACS (Orthanc + OHIF + Supabase RIS)
+- **5.3** Billing (rendicion at scale, Circulo Medico/FEMER integration)
+- **5.4** AI Dictation (Groq Whisper + GPT-4o-mini, ~$55/mo)
+- **5.5** Patient Portal (WhatsApp OTP, OHIF viewer, legally mandatory)
+- **5.6** Doctor Tools (clinical history, order studies)
+- **5.7** Middleware (Mirth Connect 4.5.2 when first HL7v2 device)
+
+---
+
+## 6. Project Structure
 
 ```
 turnera/
 ├── docs/
-│   ├── architecture/
-│   │   ├── overview.md                  # System architecture diagram
-│   │   ├── database-schema.md           # All tables, columns, relationships, RLS
-│   │   ├── api-routes.md                # Every API endpoint
-│   │   └── realtime.md                  # Realtime setup
-│   ├── decisions/
-│   │   ├── 001-custom-calendar.md
-│   │   ├── 002-multi-tenancy.md
-│   │   ├── 003-auth-model.md            # Staff-only, no patient login
-│   │   ├── 004-tech-stack.md
-│   │   ├── 005-global-patients.md       # (superseded by 011-clinic-owned-patients)
-│   │   ├── 006-n8n-per-clinic.md        # One workflow per clinic
-│   │   ├── 007-payment-permissions.md   # Secretary/admin only
-│   │   └── template.md
-│   ├── runbooks/
-│   │   ├── deploy.md
-│   │   ├── new-clinic-onboarding.md
-│   │   ├── database-migration.md
-│   │   ├── troubleshooting.md
-│   │   └── backup-restore.md
-│   ├── system-design.md                 # Backend: data flow, API, auth, cron
-│   └── design-system.md                 # UI: typography, colors, spacing
-│
-├── tools/
-│   ├── scripts/
-│   │   ├── seed.ts                      # Sample data: 1 clinic, 3 doctors, 50 patients, 200 appointments
-│   │   ├── create-user.ts               # Create staff user via CLI
-│   │   ├── create-clinic.ts             # Onboard new clinic tenant
-│   │   ├── reset-db.ts                  # Reset dev database
-│   │   └── generate-types.ts            # Regenerate Supabase TS types
-│   └── README.md
-│
-├── .claude/
-│   ├── skills/
-│   │   ├── deploy-github.md
-│   │   ├── deploy-vercel.md
-│   │   ├── explain-code.md
-│   │   ├── sync-notion.md
-│   │   └── db-migrate.md
-│   └── commands/
+│   ├── architecture/          # overview, database-schema, api-routes, realtime
+│   ├── compliance/            # personal-data-security-document.md (NEW)
+│   ├── decisions/             # 001-014 (013 observability, 014 statuses — NEW)
+│   ├── research-results/      # 33 files in 6 categories
+│   ├── runbooks/              # + disaster-recovery.md, incident-response.md (NEW)
+│   ├── superpowers/specs/     # design specs
+│   └── plan.md                # THIS FILE
 │
 ├── supabase/
-│   └── migrations/                      # 15 SQL migration files
-│       ├── 001_create_enums.sql
-│       ├── 002_create_clinics.sql
-│       ├── 003_create_staff.sql         # staff + staff_clinics
-│       ├── 004_create_doctors.sql       # doctors + doctor_clinic_settings
-│       ├── 005_create_patients.sql      # clinic_patients (clinic-owned, no global table)
-│       ├── 006_create_schedules.sql     # doctor_schedules + schedule_overrides
-│       ├── 007_create_appointments.sql
-│       ├── 008_create_waitlist.sql
-│       ├── 009_create_history.sql
-│       ├── 010_create_reminders.sql
-│       ├── 011_create_functions.sql     # get_user_clinic_ids, get_user_role, get_available_slots
-│       ├── 012_create_triggers.sql      # overlap check, payment check, no-show counter
-│       ├── 013_create_rls_policies.sql
-│       ├── 014_enable_realtime.sql
-│       └── 015_create_indexes.sql
+│   ├── migrations/            # ALL in git (001_baseline + 017-020)
+│   ├── seed.sql
+│   └── tests/                 # pgTAP (01-09)
+│
+├── tools/scripts/             # + migrate-upcn.ts (NEW)
+├── .github/workflows/         # ci.yml + deploy.yml (NEW)
 │
 ├── src/
+│   ├── instrumentation.ts     # OTel (NEW)
 │   ├── app/
-│   │   ├── (auth)/login/                # Staff-only login (admin/doctor/secretary)
+│   │   ├── global-error.tsx   # (NEW)
+│   │   ├── (auth)/login/
 │   │   ├── (dashboard)/
-│   │   │   ├── dashboard/               # Today's agenda, stats, alerts
-│   │   │   ├── calendar/                # FullCalendar day/week/month
-│   │   │   ├── appointments/            # List + new + [id] detail
-│   │   │   ├── patients/                # List + search + new + [id] profile
-│   │   │   ├── doctors/                 # List + [id] + schedule editor
-│   │   │   ├── waitlist/                # Waitlist management
-│   │   │   ├── reports/                 # Charts and analytics
-│   │   │   └── settings/               # Clinic settings, staff, notifications
+│   │   │   ├── error.tsx      # (NEW)
+│   │   │   ├── dashboard/, calendar/, appointments/
+│   │   │   ├── patients/ ✅, doctors/ ✅
+│   │   │   ├── waitlist/, reports/, rendicion/ (NEW), settings/
 │   │   └── api/
-│   │       ├── appointments/            # CRUD + available-slots + bulk-cancel
-│   │       ├── patients/                # CRUD + search (upsert by DNI)
-│   │       ├── waitlist/                # CRUD + offer slot
-│   │       ├── reminders/send/          # Trigger reminder batch
-│   │       ├── reports/                 # On-the-fly aggregates + export-pdf
-│   │       └── chatbot/                 # available-slots, book, cancel, confirm, doctors
-│   ├── components/
-│   │   ├── ui/                          # shadcn/ui (white/minimal theme)
-│   │   ├── layout/                      # Sidebar, Topbar (with clinic switcher), MobileNav
-│   │   ├── calendar/                    # CalendarView, DayView, WeekView, MonthView
-│   │   ├── appointments/                # AppointmentForm, StatusBadge, QuickBookDialog
-│   │   ├── patients/                    # PatientForm, PatientSearch, PatientHistory, BlacklistBadge
-│   │   ├── doctors/                     # ScheduleEditor, OverrideManager
-│   │   ├── dashboard/                   # TodayOverview, QuickStats, AlertsPanel
-│   │   ├── chat/                        # ChatPanel (placeholder, collapsible right panel)
-│   │   ├── waitlist/                    # WaitlistTable, OfferSlotDialog
-│   │   ├── reports/                     # AttendanceChart, RevenueProjection
-│   │   └── shared/                      # DatePicker, TimePicker, ConfirmDialog, ClinicSwitcher
+│   │       ├── patients/ ✅, doctors/ ✅
+│   │       ├── appointments/, waitlist/, rendicion/ (NEW)
+│   │       ├── reminders/, reports/
+│   ├── components/            # + rendicion/ (NEW)
 │   ├── lib/
-│   │   ├── supabase/                    # client.ts, server.ts, admin.ts
-│   │   ├── hooks/                       # useAppointments, usePatients, useAuth, useRealtime, useClinic
-│   │   ├── types/                       # database.ts (generated), domain types
-│   │   ├── utils/                       # date.ts, calendar.ts, validation.ts, pdf.ts
-│   │   └── constants/                   # statuses, routes, config
-│   └── providers/                       # AuthProvider, ClinicProvider (multi-clinic), RealtimeProvider
-├── middleware.ts                         # Auth redirect + role-based route guards
-├── .env.local                           # SUPABASE_URL, ANON_KEY, SERVICE_ROLE_KEY
-├── CLAUDE.md
-└── package.json
+│   │   ├── logger.ts, error-handler.ts, rate-limit.ts  # (NEW)
+│   │   ├── supabase/ ✅, auth/ ✅, hooks/, types/, utils/, constants/
+│   └── providers/ ✅
+│
+├── e2e/                       # Playwright (NEW)
+├── __tests__/                 # Vitest (NEW)
+│
+├── turnera-ai/                # Python backend (same repo for now)
+│   ├── app/ (main, config, routes/, services/, tools/, models/, db/)
+│   ├── worker/ (celery, tasks/, beat_schedule)
+│   ├── tests/, benchmarks/ (AutoResearch)
+│   ├── Dockerfile, docker-compose.yml, requirements.txt
+│
+├── sentry.*.config.ts         # (NEW)
+├── playwright.config.ts       # (NEW)
+├── vitest.config.ts           # (NEW)
+├── src/proxy.ts, next.config.ts, CLAUDE.md, package.json
 ```
 
-### Auth & Roles
+---
 
-| Capability | Admin | Doctor | Secretary |
-|-----------|-------|--------|-----------|
-| View calendar (all doctors) | Yes | Own only | Yes |
-| Create/cancel/reschedule appointment | Yes | Own only | Yes |
-| Mark attended/no-show | Yes | Own only | Yes |
-| Manage patients (CRUD) | Yes | Read only | Yes |
-| Manage doctor schedules | Yes | Own only | No |
-| View reports | Yes | Own only | Yes |
-| Manage staff + clinic settings | Yes | No | No |
-| **Mark payments** | **Yes** | **Read only** | **Yes** |
-| Switch clinics (if multi-clinic) | Yes | Yes | Yes |
+## 7. Verification Plan (48 Tests)
+
+### Phase 1 (24 tests)
+
+| # | Test | Method | Criteria |
+|---|------|--------|----------|
+| 1 | Migrations in git | ls | 001_baseline.sql exists |
+| 2 | RLS: tenant isolation | pgTAP | 0 rows for other tenant, all 17 tables |
+| 3 | RLS: silent failure | pgTAP | 0 rows for unauth, not error |
+| 4 | Trigger: overlap | pgTAP | Double-book rejected, entreturno passes |
+| 5 | Trigger: payment | pgTAP | Doctor rejected, secretary/admin pass |
+| 6 | Trigger: no-show | pgTAP | Counter increments per-clinic |
+| 7 | Trigger: patient audit | pgTAP | UPDATE → patient_history row |
+| 8 | Auth: login | Playwright | All roles, invalid creds error |
+| 9 | Auth: guards | Playwright | Unauth → /login, doctor blocked from /settings |
+| 10 | Auth: CVE | Vitest | x-middleware-subrequest rejected |
+| 11 | Booking flow | Playwright | Slot → form → save → calendar < 3s |
+| 12 | Entreturno | Playwright | Squeeze-in with is_entreturno=true |
+| 13 | Duplicate prevention | Playwright | Same-day warning |
+| 14 | Rendicion | Playwright | Order + coseguro linked in summary |
+| 15 | Status workflow | Vitest | Valid transitions pass, invalid rejected |
+| 16 | Multi-clinic | Playwright | Switcher works, data isolated |
+| 17 | Realtime | Manual | Two tabs, < 2s sync |
+| 18 | Error boundaries | Manual | Kill DB → boundary shown, Sentry captures |
+| 19 | Observability | Manual | Error → Sentry < 30s, trace in Grafana |
+| 20 | Rate limiting | Vitest | 6th login/min → 429 |
+| 21 | Performance | Lighthouse/Grafana | LCP < 2.5s, TTI < 3.5s, API p95 < 500ms |
+| 22 | CI pipeline | GH Actions | All checks pass |
+| 23 | PDF export | Manual | Correct data |
+| 24 | Seed script | Bash | No errors |
+
+### Phase 2 (10 tests)
+
+| # | Test | Method | Criteria |
+|---|------|--------|----------|
+| 25-27 | WhatsApp send, reminder, tracking | Manual | Delivered, states tracked |
+| 28-30 | Chatbot book/cancel/handoff | WhatsApp | Flow completes correctly |
+| 31 | RAG | WhatsApp | Clinic-specific answer |
+| 32 | Distributed tracing | Grafana | Single trace across services |
+| 33 | Waitlist notify | Manual | Cancel → offer sent |
+| 34 | FastAPI health | curl | 200 |
+
+### Phase 3 (8 tests)
+
+| # | Test | Method | Criteria |
+|---|------|--------|----------|
+| 35-36 | Timeline, family | Playwright | Correct display |
+| 37 | Reports accuracy | Vitest | Matches SQL |
+| 38 | Recurring | Playwright | 4 future appointments |
+| 39-41 | Offline read/queue/PWA | Manual | Cache works, syncs, installable |
+| 42 | AutoResearch RAG | Benchmark | Accuracy improves |
+
+### Phase 4 (6 tests)
+
+| # | Test | Method | Criteria |
+|---|------|--------|----------|
+| 43 | UPCN migration | Script | 5,327 patients, clean |
+| 44 | Parallel run | Manual | Data matches |
+| 45 | PITR restore | Manual | Data intact |
+| 46 | Load test | k6 | 100 users, p99 < 1.5s, 0 leaks |
+| 47 | Secretary benchmark | Stopwatch | < 30 seconds |
+| 48 | Onboarding wizard | Playwright | Full setup works |
 
 ---
 
-## WhatsApp Connection
+## 8. Operational Readiness
 
-### Phase 1: External BSP (YCloud or similar)
-Each clinic connects their WhatsApp number through an external BSP like YCloud. The BSP handles Meta's complexity (Embedded Signup, WABA creation, template approval). We store the resulting credentials.
+### Runbooks
 
-**Onboarding flow:**
-1. Admin goes to **Settings → WhatsApp**
-2. Follows link/instructions to connect via BSP's platform (e.g., YCloud)
-3. BSP provides: `phone_number_id`, `waba_id`, `business_id`
-4. Admin enters credentials in our Settings page (or received via BSP webhook)
-5. Status changes to `connected`
+| Runbook | Contents |
+|---------|----------|
+| deploy.md | GitHub → Vercel, migrations, rollback |
+| new-clinic-onboarding.md | Clinic → staff → doctors → WhatsApp → RAG |
+| database-migration.md | Write, test, deploy safely |
+| disaster-recovery.md | PITR restore, RTO/RPO, quarterly test |
+| incident-response.md | Severity, escalation, postmortem |
+| troubleshooting.md | Auth, RLS, WhatsApp, migrations |
+| backup-restore.md | PITR config, archive, verification |
 
-### Phase 2 (Future): Own Embedded Signup
-When we register as Meta Tech Provider, build our own Embedded Signup directly in the Settings page. Until then, the BSP handles this.
+### Alerts
 
-### Coexistence Mode
-- Clinic keeps using their WhatsApp Business app normally
-- Our API (via BSP) sends/receives messages in parallel on the same number
-- When staff replies from the app, bot pauses for a configurable timeout (handoff)
-- **Requirement**: Client must open WhatsApp Business app at least every 14 days
+| Alert | Condition | Severity |
+|-------|-----------|----------|
+| Error rate | > 5% / 5min | Critical |
+| Slow API | p99 > 3s / 5min | Warning |
+| Auth spike | > 10 failures/min/IP | Warning |
+| Zero bookings | 2h during business hours | Critical |
+| WhatsApp failures | > 20% delivery | Warning |
+| Disk usage | > 80% Supabase | Warning |
+| PITR lag | > 5 minutes | Critical |
 
-### Prerequisites (for the clinic)
-- WhatsApp Business App (not personal WhatsApp), version 2.24.17+
-- Number active for at least 7 days
-- Facebook account
-
-### WhatsApp Message Templates (registered with Meta via BSP)
-- **Reminder**: "Hola {{1}}, te recordamos tu turno el {{2}} a las {{3}} con {{4}}. Respondé SI para confirmar o NO para cancelar."
-- **Confirmation**: "Tu turno fue confirmado para el {{2}} a las {{3}}."
-- **Cancellation**: "Tu turno del {{2}} fue cancelado. ¿Querés reprogramar?"
-
-### No Meta Verification Needed (for most clinics)
-- Without verification: 250 business-initiated messages/day (enough for <50 appointments/day)
-- Patient-initiated conversations (service messages) are unlimited and free
-
-### UI
-- **Settings → WhatsApp**: Connection status, BSP credentials input, connected number display, disconnect option
-- **Status badge** in sidebar: green dot if connected, red if disconnected
-
----
-
-## Chatbot Integration (Future — n8n + Embedded Panel)
-
-The chatbot will be built later in n8n. **One workflow per clinic** for isolation.
-
-For now, the app includes:
-- **`ChatPanel` component** embedded in dashboard (collapsible right panel)
-- **Placeholder UI** with "Chatbot coming soon"
-- **API endpoints ready** for when n8n is connected
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/chatbot/available-slots` | GET | Available slots for doctor+date |
-| `/api/chatbot/book` | POST | Book appointment (upsert patient by phone/DNI) |
-| `/api/chatbot/cancel` | POST | Cancel by patient phone + appointment ID |
-| `/api/chatbot/patient-appointments` | GET | Upcoming appointments for phone number |
-| `/api/chatbot/doctors` | GET | List doctors with specialties |
-| `/api/chatbot/confirm` | POST | Patient confirms via chatbot response |
-
-**Patient creation via chatbot**: Upserts into `clinic_patients` by DNI/phone for that specific clinic. No global patient table involved.
-
----
-
-## Dashboard Layout
+### Timeline
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│ TOPBAR: Logo | [Clinic Switcher ▼] | "Dr. Martinez" | Notif │
-├──────────┬───────────────────────────────────────────────────┤
-│ SIDEBAR  │  QUICK STATS: 12 Today | 3 Confirmed |           │
-│          │  8 Pending | 1 No-show | 85% Rate                 │
-│ Dashboard├───────────────────────────────────────────────────┤
-│ Calendar │  TODAY'S AGENDA                                    │
-│ Appts    │  08:00 | Garcia, Juan | Checkup | Confirmed       │
-│ Patients │  08:30 | Lopez, Maria | Follow-up | Pending       │
-│ Waitlist │  09:00 | [AVAILABLE SLOT]                         │
-│ Doctors  │  09:30 | Perez, Carlos | Pain | EMERGENCY         │
-│ Reports  ├───────────────────────────────────────────────────┤
-│ Settings │  ALERTS: 2 unconfirmed | 1 blacklisted patient    │
-│          ├───────────────────────────────────────────────────┤
-│          │  RECENT ACTIVITY: Cancellations, waitlist          │
-└──────────┴───────────────────────────────────────────────────┘
+Phase 1: Core MVP          Weeks 1-6    (3 done, 3 remaining)
+Phase 2: Communications    Weeks 7-10
+Phase 3: CRM + Offline     Weeks 11-14
+Phase 4: Production        Weeks 15-17
+Phase 5: Sanatorio         TBD (after Cittadino meeting)
 ```
-
-Multi-clinic staff see a **Clinic Switcher** dropdown in the topbar. All data updates when switching.
-
----
-
-## UI Approach
-
-**Sober, blue/white, Obsidian-inspired flat design.** Always use `/frontend-design` skill for UI work.
-- **Base**: shadcn/ui (Radix + Tailwind)
-- **Sidebar**: Blue-800 (`#1e40af`) background, white text, blue-600 active link
-- **Content area**: White background, gray-50 cards, thin 1px borders (`#e5e5e5`)
-- **Primary accent**: Blue-500 (`#3b82f6`) for buttons, links, active states
-- **Typography**: Inter (or system font stack), near-black (`#1a1a1a`)
-- **Style**: Flat (no shadows), compact spacing, minimal color usage, clean
-- **Status colors**: Green (confirmed), Yellow (pending), Red (cancelled/emergency), Gray (no-show, completed)
-- **Blacklist badge**: Red "Blacklisted" or Yellow "Warned" badge on patient cards
-
----
-
-## Implementation Phases
-
-### Phase 1: Core MVP (Weeks 1-4)
-- **Week 1**: Project setup (Next.js + Supabase + Auth). All 15 database migrations. Login page. Seed script. ✅ DONE
-- **Week 2**:
-  - **Spec A** — UI restyling (blue sidebar, Obsidian-flat style) + Patient CRUD:
-    - Restyle sidebar (blue-800 bg), topbar, login, dashboard, shadcn theme
-    - Patient list page: search-first approach (search bar + table, 20/page)
-    - Create patient: minimal form (first name, last name, DNI, phone). DNI unique per clinic.
-    - Edit patient: full form split in Personal Info + Insurance & Notes sections
-    - API routes: GET/POST /api/patients, GET/PUT /api/patients/[id]
-    - React Query hooks for data fetching
-  - **Spec B** — Doctor schedule configuration + `get_available_slots` wiring (separate spec)
-- **Week 3**: Appointment CRUD. FullCalendar views (day/week/month). Quick booking. Appointment detail/edit.
-- **Week 4**: Dashboard overview (today's agenda, stats, alerts). Status workflow. Payment marking (secretary/admin). PDF export.
-
-### Phase 2: Communications & WhatsApp (Weeks 5-7)
-- **Week 5**: WhatsApp Embedded Signup flow (Settings page, Meta popup, WABA storage). Reminders table.
-- **Week 6**: n8n CB-7 Reminder Dispatcher (per-clinic). n8n CB-6 Appointment Manager (per-clinic). Chatbot API endpoints.
-- **Week 7**: Waitlist management. Auto-notification on slot opening. Cancellation policy. Blacklist management UI. Bot-to-human handoff logic.
-
-### Phase 3: CRM, Reports & Polish (Weeks 8-10)
-- **Week 8**: Patient CRM: family links, tags, classification, no-show history, blacklist management.
-- **Week 9**: Reports (on-the-fly aggregates: attendance, revenue, insurance). Recurring appointments.
-- **Week 10**: Realtime updates. Multi-clinic switcher polish. Mass cancellation. Overbooking. Settings. Mobile.
-
-### Phase 4: Future
-- Google Calendar one-way sync
-- Billing system integration
-- Document management (lab results)
-- Patient self-service portal
-- Multi-clinic onboarding flow
-
----
-
-## Testing & Developer Tools
-
-### Scripts (`tools/scripts/`)
-- **`seed.ts`**: 1 clinic, 3 doctors, 50 patients, 200 appointments. `npx tsx tools/scripts/seed.ts`
-- **`create-user.ts`**: `npx tsx tools/scripts/create-user.ts --email doc@clinic.com --role doctor --clinic clinica_demo`
-- **`create-clinic.ts`**: Onboard new tenant
-- **`reset-db.ts`**: Drop and re-run migrations (dev only)
-- **`generate-types.ts`**: `supabase gen types typescript`
-
-### Chrome DevTools with Claude
-- Use browser MCP to verify layouts, interactions, real-time updates
-
-### TestSprite
-- Automated browser testing after Phase 1 for critical flows
-
----
-
-## Verification Plan
-
-1. **Database**: Run all 15 migrations. Run `seed.ts`. Verify RLS policies and `get_available_slots`.
-2. **Auth**: Test login for admin/doctor/secretary. Verify route guards. Verify patients cannot log in.
-3. **Multi-clinic**: Create staff linked to 2 clinics. Verify clinic switcher works. Verify data isolation.
-4. **Blacklist**: Mark appointment as no-show. Verify `no_show_count` incremented only for that clinic. Verify other clinic sees clean record.
-5. **Payments**: Verify doctor CANNOT change payment_status. Verify secretary/admin CAN.
-6. **Calendar**: Create appointments. Verify FullCalendar. Test drag-drop. Verify overlap detection.
-7. **Chatbot API**: curl `/api/chatbot/available-slots` and `/api/chatbot/book`. Verify patient creation in `clinic_patients` by DNI.
-8. **Realtime**: Two tabs, create appointment in one — appears in other.
-9. **Reports**: Verify on-the-fly aggregates match seed data.
-10. **PDF**: Export daily agenda, verify content.
