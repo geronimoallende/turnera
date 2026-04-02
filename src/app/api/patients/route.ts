@@ -14,16 +14,20 @@
  * Both endpoints use the server Supabase client, which reads the
  * logged-in user's JWT from cookies. RLS policies ensure you can
  * only see/modify patients at clinics you belong to.
+ *
+ * Error handling is centralized via withErrorHandler() — no manual
+ * try/catch or safeParse needed. See src/lib/error-handler.ts.
  */
 
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { withErrorHandler, ApiError } from "@/lib/error-handler"
 
 // ─── Validation Schemas ──────────────────────────────────────────
 // zod schemas define what shape the incoming data must have.
-// If the data doesn't match, we return a 400 error immediately
-// instead of letting bad data reach the database.
+// If the data doesn't match, .parse() throws a ZodError which
+// withErrorHandler() catches and returns as a 400 response.
 
 /** Schema for GET query parameters */
 const listSchema = z.object({
@@ -44,22 +48,15 @@ const createSchema = z.object({
 
 // ─── GET: List patients for a clinic ─────────────────────────────
 
-export async function GET(request: NextRequest) {
+export const GET = withErrorHandler(async (request: NextRequest) => {
   // 1. Parse query parameters from the URL
   //    request.nextUrl.searchParams is like URLSearchParams
   const params = Object.fromEntries(request.nextUrl.searchParams)
 
-  // 2. Validate with zod — safeParse returns { success, data, error }
-  //    instead of throwing an exception
-  const parsed = listSchema.safeParse(params)
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues },
-      { status: 400 }
-    )
-  }
-
-  const { clinic_id, search, page, limit } = parsed.data
+  // 2. Validate with zod — .parse() throws ZodError if invalid.
+  //    No need for safeParse + if-check anymore — withErrorHandler
+  //    catches the ZodError and returns a 400 response automatically.
+  const { clinic_id, search, page, limit } = listSchema.parse(params)
 
   // 3. Create a server-side Supabase client (reads JWT from cookies)
   const supabase = await createClient()
@@ -116,8 +113,10 @@ export async function GET(request: NextRequest) {
   // 7. Execute the query
   const { data, error, count } = await query
 
+  // If Supabase returns an error, throw ApiError.
+  // withErrorHandler catches it and returns a proper 500 response.
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new ApiError(error.message, 500, "DB_ERROR")
   }
 
   // 8. Return the results with pagination metadata
@@ -130,23 +129,15 @@ export async function GET(request: NextRequest) {
       totalPages: count ? Math.ceil(count / limit) : 0,
     },
   })
-}
+})
 
 // ─── POST: Create a patient at a clinic ─────────────────────────
 
-export async function POST(request: NextRequest) {
+export const POST = withErrorHandler(async (request: NextRequest) => {
   // 1. Parse and validate the request body
+  //    .parse() throws ZodError if invalid → caught by withErrorHandler → 400
   const body = await request.json()
-  const parsed = createSchema.safeParse(body)
-
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues },
-      { status: 400 }
-    )
-  }
-
-  const { first_name, last_name, dni, phone, clinic_id } = parsed.data
+  const { first_name, last_name, dni, phone, clinic_id } = createSchema.parse(body)
 
   const supabase = await createClient()
 
@@ -161,9 +152,12 @@ export async function POST(request: NextRequest) {
     .maybeSingle()
 
   if (existing) {
-    return NextResponse.json(
-      { error: "Patient with this DNI is already registered at this clinic" },
-      { status: 409 } // 409 = Conflict
+    // Throw ApiError instead of manually building the response.
+    // withErrorHandler catches it and returns { error, code, requestId } with status 409.
+    throw new ApiError(
+      "Patient with this DNI is already registered at this clinic",
+      409,
+      "DUPLICATE_DNI"
     )
   }
 
@@ -181,11 +175,11 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new ApiError(error.message, 500, "DB_ERROR")
   }
 
   return NextResponse.json(
     { data, message: "Patient created" },
     { status: 201 } // 201 = Created
   )
-}
+})

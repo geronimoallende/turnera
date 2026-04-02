@@ -14,11 +14,15 @@
  * The [id] in the folder name is a "dynamic segment" — Next.js
  * extracts it from the URL. So /api/patients/abc-123 gives you
  * params.id = "abc-123" (the clinic_patients row UUID).
+ *
+ * Error handling is centralized via withErrorHandler() — no manual
+ * try/catch or safeParse needed. See src/lib/error-handler.ts.
  */
 
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { withErrorHandler, ApiError } from "@/lib/error-handler"
 
 // ─── Validation Schemas ──────────────────────────────────────────
 
@@ -44,20 +48,19 @@ const updateSchema = z.object({
 
 // ─── GET: Fetch a single patient ─────────────────────────────────
 
-export async function GET(
+export const GET = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  // In Next.js 15+, params is a Promise — we must await it
-  const { id } = await params
+  context
+) => {
+  // In Next.js 16, params is a Promise — we must await it.
+  // context?.params contains the dynamic route segments.
+  // For /api/patients/[id], it has { id: "the-uuid" }.
+  const { id } = await context!.params
 
   // Read clinic_id from query params
   const clinic_id = request.nextUrl.searchParams.get("clinic_id")
   if (!clinic_id) {
-    return NextResponse.json(
-      { error: "clinic_id query parameter is required" },
-      { status: 400 }
-    )
+    throw new ApiError("clinic_id query parameter is required", 400, "MISSING_PARAM")
   }
 
   const supabase = await createClient()
@@ -97,53 +100,37 @@ export async function GET(
     .maybeSingle()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new ApiError(error.message, 500, "DB_ERROR")
   }
 
   if (!data) {
-    return NextResponse.json(
-      { error: "Patient not found at this clinic" },
-      { status: 404 }
-    )
+    throw new ApiError("Patient not found at this clinic", 404, "NOT_FOUND")
   }
 
   return NextResponse.json({ data })
-}
+})
 
 // ─── PUT: Update a patient ───────────────────────────────────────
 
-export async function PUT(
+export const PUT = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params
+  context
+) => {
+  const { id } = await context!.params
 
   // 1. Parse and validate the body
+  //    .parse() throws ZodError if invalid → caught by withErrorHandler → 400
   const body = await request.json()
-  const parsed = updateSchema.safeParse(body)
+  const { clinic_id, ...updateData } = updateSchema.parse(body)
 
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues },
-      { status: 400 }
-    )
-  }
-
-  // 2. Separate clinic_id from the fields to update
-  //    clinic_id is used for filtering, not for updating
-  const { clinic_id, ...updateData } = parsed.data
-
-  // 3. If nothing to update, return early
+  // 2. If nothing to update, return early
   if (Object.keys(updateData).length === 0) {
-    return NextResponse.json(
-      { error: "No fields to update" },
-      { status: 400 }
-    )
+    throw new ApiError("No fields to update", 400, "NO_FIELDS")
   }
 
   const supabase = await createClient()
 
-  // 4. If DNI is being changed, check it doesn't conflict with
+  // 3. If DNI is being changed, check it doesn't conflict with
   //    another patient at the same clinic
   if (updateData.dni) {
     const { data: conflict } = await supabase
@@ -155,14 +142,15 @@ export async function PUT(
       .maybeSingle()
 
     if (conflict) {
-      return NextResponse.json(
-        { error: "Another patient at this clinic already has this DNI" },
-        { status: 409 }
+      throw new ApiError(
+        "Another patient at this clinic already has this DNI",
+        409,
+        "DUPLICATE_DNI"
       )
     }
   }
 
-  // 5. Update the clinic_patients record directly — one table, one step
+  // 4. Update the clinic_patients record directly — one table, one step
   const { error: updateError } = await supabase
     .from("clinic_patients")
     .update(updateData)
@@ -170,13 +158,10 @@ export async function PUT(
     .eq("clinic_id", clinic_id)
 
   if (updateError) {
-    return NextResponse.json(
-      { error: updateError.message },
-      { status: 500 }
-    )
+    throw new ApiError(updateError.message, 500, "DB_ERROR")
   }
 
-  // 6. Re-fetch the updated record to return the latest data
+  // 5. Re-fetch the updated record to return the latest data
   const { data, error } = await supabase
     .from("clinic_patients")
     .select(
@@ -209,8 +194,8 @@ export async function PUT(
     .single()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new ApiError(error.message, 500, "DB_ERROR")
   }
 
   return NextResponse.json({ data })
-}
+})
