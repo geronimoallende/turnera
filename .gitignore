@@ -37,3 +37,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# supabase CLI cache (has project ref, credentials context)
+supabase/.temp/
+
+# claude plugins (temporary brainstorm sessions, server PIDs)
+.superpowers/

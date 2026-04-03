@@ -7,7 +7,7 @@ Accepted
 - **Frontend**: Next.js 14 (App Router) + TypeScript + Tailwind CSS + shadcn/ui
 - **Calendar**: @fullcalendar/react
 - **Database**: Supabase (PostgreSQL + RLS + Realtime + Auth)
-- **Chatbot**: n8n (existing EasyPanel VPS)
+- **AI Backend**: FastAPI + LangChain (VPS, Docker) — WhatsApp chatbot, RAG, reminders
 - **Hosting**: Vercel (via GitHub auto-deploy)
 - **Forms**: react-hook-form + zod
 - **Charts**: recharts

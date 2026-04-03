@@ -25,6 +25,22 @@ All routes filter by the active `clinic_id` from the request.
 | PATCH | `/api/patients/[id]` | Update patient | Admin, Secretary |
 | GET | `/api/patients/search` | Search by name, DNI, phone | All |
 
+## Doctors
+
+| Method | Route | Description | Roles |
+|--------|-------|-------------|-------|
+| GET | `/api/doctors` | List doctors at clinic | All |
+| GET | `/api/doctors/[id]` | Doctor profile + clinic settings | All |
+| PUT | `/api/doctors/[id]` | Update doctor profile | Admin, Doctor (own) |
+| PUT | `/api/doctors/[id]/settings` | Update per-clinic settings | Admin |
+| GET | `/api/doctors/[id]/schedules` | List weekly schedules | All |
+| POST | `/api/doctors/[id]/schedules` | Add schedule block | Admin, Doctor (own) |
+| DELETE | `/api/doctors/[id]/schedules/[scheduleId]` | Remove schedule | Admin, Doctor (own) |
+| GET | `/api/doctors/[id]/overrides` | List schedule overrides | All |
+| POST | `/api/doctors/[id]/overrides` | Add override | Admin, Doctor (own) |
+| DELETE | `/api/doctors/[id]/overrides/[overrideId]` | Remove override | Admin, Doctor (own) |
+| GET | `/api/doctors/[id]/available-slots` | Get slots for date | All |
+
 ## Waitlist
 
 | Method | Route | Description | Roles |
@@ -42,19 +58,6 @@ All routes filter by the active `clinic_id` from the request.
 | GET | `/api/reports/monthly` | Monthly stats | Admin, Secretary |
 | GET | `/api/reports/export-pdf` | Export agenda as PDF | All |
 
-## Reminders
+## Note: WhatsApp & AI Endpoints
 
-| Method | Route | Description | Roles |
-|--------|-------|-------------|-------|
-| POST | `/api/reminders/send` | Trigger reminder batch | System/n8n |
-
-## Chatbot (requires `x-webhook-secret` header)
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/chatbot/available-slots` | Slots for doctor+date |
-| POST | `/api/chatbot/book` | Book appointment |
-| POST | `/api/chatbot/cancel` | Cancel appointment |
-| GET | `/api/chatbot/patient-appointments` | Upcoming for phone |
-| GET | `/api/chatbot/doctors` | List doctors |
-| POST | `/api/chatbot/confirm` | Patient confirms |
+WhatsApp webhooks, chatbot, reminders, and RAG are handled by the **Python AI backend** (FastAPI on a separate VPS), not by Next.js API routes. The Python backend talks directly to Supabase with `service_role` key. See `docs/decisions/012-python-ai-backend.md`.

@@ -1,6 +1,6 @@
 # Turnera — Engineering Plan v2
 
-> **Last updated**: 2026-04-01
+> **Last updated**: 2026-04-03
 > **Supersedes**: Original plan (feature-only, 12 tables, n8n, no observability)
 > **Design spec**: `docs/superpowers/specs/2026-04-01-engineering-plan-v2-design.md`
 
@@ -143,7 +143,7 @@ Browser ──→ Vercel (Next.js) ──→ Supabase ←── FastAPI (VPS)
 
 | Layer | Tool | Tests | CI |
 |-------|------|-------|-----|
-| Database | pgTAP | RLS (17 tables), triggers, functions | Every PR |
+| Database | pgTAP | RLS (18 tables), triggers, functions | Every PR |
 | API | Vitest | Routes with admin/doctor/secretary/unauth contexts | Every PR |
 | E2E | Playwright | Critical flows (booking, auth, rendicion) | Every PR |
 | Load | k6 | Concurrent bookings, slot calculation | Pre-release |
@@ -209,7 +209,7 @@ PITR on Supabase Pro. Quarterly restore tests. Yearly cold storage archive for a
 
 ---
 
-## 4. Database Schema (17 Tables)
+## 4. Database Schema (18 Tables)
 
 ### Architecture
 
@@ -218,8 +218,9 @@ GLOBAL:     staff, doctors
 JUNCTION:   staff_clinics, doctor_clinic_settings
 PER-CLINIC: clinics, clinic_patients, appointments, doctor_schedules,
             schedule_overrides, waitlist, reminders, appointment_history,
-            patient_history (NEW), clinic_faqs, clinic_services,
-            document_embeddings, conversation_sessions
+            patient_history (NEW), doctor_invitations (NEW Phase 4),
+            clinic_faqs, clinic_services, document_embeddings,
+            conversation_sessions
 ```
 
 ### New: `patient_history` (Table 17 — Legal Compliance)
@@ -252,8 +253,28 @@ RLS: SELECT only. No UPDATE/DELETE. Trigger: AFTER INSERT/UPDATE/DELETE on `clin
 
 Status flow: `otorgado → confirmed → arrived → in_progress → completed/no_show`. Cancel branches: `cancelled_patient`, `cancelled_doctor`, `cancelled_clinic`, `rescheduled`.
 
+### New: `doctor_invitations` (Table 18 — Multi-Clinic Doctor Linking)
+
+Added in Phase 4 when multi-clinic support is needed. Not required for single-clinic MVP.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID PK | |
+| doctor_id | UUID FK → doctors | Who's being invited |
+| clinic_id | UUID FK → clinics | Who's inviting |
+| invited_by | UUID FK → staff | Which admin sent it |
+| status | TEXT DEFAULT 'pending' | pending/accepted/declined/expired |
+| token | TEXT UNIQUE | For email acceptance link |
+| expires_at | TIMESTAMPTZ | 7 days from creation |
+| created_at | TIMESTAMPTZ | |
+| responded_at | TIMESTAMPTZ | |
+
+RLS: SELECT by clinic admin who invited + the invited doctor. INSERT by clinic admins. UPDATE by invited doctor only (to accept/decline).
+
 ### New Functions
 
+- `create_doctor_at_clinic(email, password, first_name, last_name, specialty, license, clinic_id, slot_duration, fee)` — SECURITY DEFINER function that atomically creates auth user + staff + staff_clinics + doctors + doctor_clinic_settings in one transaction. Rolls back everything if any step fails. Used by POST /api/doctors.
+- `link_doctor_to_clinic(doctor_id, clinic_id, slot_duration, fee)` — SECURITY DEFINER function that atomically creates staff_clinics + doctor_clinic_settings. Used by POST /api/doctors/link (Phase 1 direct, Phase 4 after invitation acceptance).
 - `get_rendicion_summary(clinic_id, doctor_id, date_start, date_end)` — proper FK reconciliation
 - `get_available_slots` updated — `can_entreturno` flag, respects `allows_overbooking`
 
@@ -261,9 +282,11 @@ Status flow: `otorgado → confirmed → arrived → in_progress → completed/n
 
 1. `supabase db pull` → `001_baseline.sql` (commit existing schema)
 2. `017_create_patient_history.sql`
-3. `018_add_entreturno_rendicion.sql`
-4. `019_add_bsuid_fields.sql`
-5. `020_create_rendicion_function.sql`
+3. `018_create_doctor_functions.sql` — `create_doctor_at_clinic()` + `link_doctor_to_clinic()` SECURITY DEFINER functions
+4. `019_add_entreturno_rendicion.sql`
+5. `020_add_bsuid_fields.sql`
+6. `021_create_rendicion_function.sql`
+7. `022_create_doctor_invitations.sql` — Phase 4 (multi-clinic invitation table + RLS)
 
 ---
 
@@ -284,7 +307,22 @@ Status flow: `otorgado → confirmed → arrived → in_progress → completed/n
 - [ ] Migration 017: `patient_history`
 
 **Week 2: Patients** ✅ DONE
-**Week 3: Doctors** ✅ DONE
+
+**Week 3: Doctors** (read side done, write side pending)
+
+- [x] Doctor list API (GET /api/doctors)
+- [x] Doctor detail API (GET /api/doctors/[id])
+- [x] Doctor settings API (GET/PUT /api/doctors/[id]/settings)
+- [x] Doctor schedules API (CRUD /api/doctors/[id]/schedules)
+- [x] Doctor overrides API (CRUD /api/doctors/[id]/overrides)
+- [x] Available slots API (GET /api/doctors/[id]/available-slots)
+- [x] Doctors list page + detail page UI
+- [ ] Migration: `create_doctor_at_clinic()` DB function (atomic, SECURITY DEFINER)
+- [ ] POST /api/doctors — create new doctor (auth + staff + staff_clinics + doctors + doctor_clinic_settings in one transaction)
+- [ ] POST /api/doctors/link — link existing doctor to a clinic (staff_clinics + doctor_clinic_settings)
+- [ ] POST /api/doctors/lookup — search by email, return minimal info (partial name + specialty only)
+- [ ] "Add Doctor" UI — new vs existing flow, admin only
+- [ ] DELETE /api/doctors/[id]/settings — soft-deactivate doctor at a clinic (set is_active=false)
 
 **Week 4: Appointments + FullCalendar** ← NEXT
 
@@ -312,7 +350,7 @@ Status flow: `otorgado → confirmed → arrived → in_progress → completed/n
 
 **Week 6: Testing + CI/CD + Security**
 
-- [ ] pgTAP: RLS (17 tables) + triggers + functions
+- [ ] pgTAP: RLS (18 tables) + triggers + functions
 - [ ] Vitest: all API routes
 - [ ] GitHub Actions pipeline
 - [ ] Supabase Branching (staging)
@@ -350,7 +388,7 @@ Status flow: `otorgado → confirmed → arrived → in_progress → completed/n
 ### Phase 4: Production Readiness (Weeks 15-17)
 
 **Week 15:** UPCN data migration (profile, transform, parallel run, secretary training, cutover)
-**Week 16:** Multi-clinic onboarding (wizard, per-clinic RAG, WhatsApp, Grafana per-tenant)
+**Week 16:** Multi-clinic onboarding (wizard, per-clinic RAG, WhatsApp, Grafana per-tenant, doctor invitation system — migration 022, accept/decline flow, email notifications)
 **Week 17:** Hardening (DR test, runbooks, archival, security audit, AAIP, load test 10 clinics)
 
 **Exit criteria:** UPCN live, 1+ additional clinic, DR tested, load-tested.
@@ -436,7 +474,7 @@ turnera/
 | # | Test | Method | Criteria |
 |---|------|--------|----------|
 | 1 | Migrations in git | ls | 001_baseline.sql exists |
-| 2 | RLS: tenant isolation | pgTAP | 0 rows for other tenant, all 17 tables |
+| 2 | RLS: tenant isolation | pgTAP | 0 rows for other tenant, all 18 tables |
 | 3 | RLS: silent failure | pgTAP | 0 rows for unauth, not error |
 | 4 | Trigger: overlap | pgTAP | Double-book rejected, entreturno passes |
 | 5 | Trigger: payment | pgTAP | Doctor rejected, secretary/admin pass |

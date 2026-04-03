@@ -24,6 +24,12 @@
 - **Check**: Is the subscription filtering by the correct `clinic_id`?
 - **Check**: Browser console for WebSocket errors
 
-### n8n webhook returns 401
-- **Check**: Is the `x-webhook-secret` header correct?
-- **Check**: Is the clinic's `n8n_webhook_url` correctly set?
+### WhatsApp messages not being received
+- **Check**: Is the FastAPI VPS running? Hit `https://ai.turnera.app/health`
+- **Check**: Is YCloud webhook URL correctly set to `https://ai.turnera.app/webhook/whatsapp`?
+- **Check**: Docker logs: `docker-compose logs api` on the VPS
+
+### Reminders not sending
+- **Check**: Is Celery Beat running? `docker-compose logs celery-beat`
+- **Check**: Is the Celery Worker processing tasks? `docker-compose logs celery-worker`
+- **Check**: YCloud API key is valid and has credit

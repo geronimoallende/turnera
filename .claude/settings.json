@@ -10,7 +10,13 @@
       "Bash(grep -v '^supabase$')",
       "Bash(grep -v '^tools$')",
       "Bash(grep -v '^studies$')",
-      "Bash(node -e \"const { z } = require\\(''zod''\\); const r = z.object\\({ name: z.string\\(\\) }\\).safeParse\\({}\\); if \\(!r.success\\) console.log\\(JSON.stringify\\(r.error.issues, null, 2\\)\\)\")"
+      "Bash(node -e \"const { z } = require\\(''zod''\\); const r = z.object\\({ name: z.string\\(\\) }\\).safeParse\\({}\\); if \\(!r.success\\) console.log\\(JSON.stringify\\(r.error.issues, null, 2\\)\\)\")",
+      "Read(//c/Users/UPCN/OneDrive/Escritorio/**)",
+      "Read(//c/Users/UPCN/Downloads/attachments//**)",
+      "mcp__supabase__list_migrations",
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__apply_migration",
+      "Read(//c/Users/UPCN/OneDrive/SecondBrain/01-Projects/UPCN/Turnera/**)"
     ]
   },
   "enabledPlugins": {

@@ -12,7 +12,7 @@ A multi-tenant appointment scheduling system ("turnera") for medical offices. Bu
 - **Calendar**: @fullcalendar/react
 - **Database**: Supabase (PostgreSQL + RLS + Realtime + Auth)
 - **Hosting**: Vercel (auto-deploy via GitHub push)
-- **Chatbot**: n8n on EasyPanel VPS (one workflow per clinic, built later)
+- **AI Backend**: FastAPI + LangChain on VPS (Docker) — WhatsApp chatbot, RAG, reminders, AI agent
 - **Forms**: react-hook-form + zod
 - **Charts**: recharts
 - **PDF**: @react-pdf/renderer
@@ -32,7 +32,7 @@ Every per-clinic table has `clinic_id`. RLS policies filter by `clinic_id = ANY(
 ### Global vs Per-Clinic Entities
 - **Global** (no clinic_id): `staff`, `doctors`
 - **Junction tables** (per-clinic metadata): `staff_clinics`, `doctor_clinic_settings`
-- **Per-clinic** (always have clinic_id): `clinic_patients`, `appointments`, `waitlist`, `reminders`, `doctor_schedules`, `schedule_overrides`, `appointment_history`
+- **Per-clinic** (always have clinic_id): `clinic_patients`, `appointments`, `waitlist`, `reminders`, `doctor_schedules`, `schedule_overrides`, `appointment_history`, `clinic_faqs`, `clinic_services`, `document_embeddings`, `conversation_sessions`
 
 ### Auth Model
 Only staff logs in (admin/doctor/secretary). Patients do NOT have accounts. See `docs/decisions/003-auth-model.md`.
@@ -43,8 +43,8 @@ Each clinic owns their patient records independently in `clinic_patients`. DNI i
 ### Payments
 Only admin and secretary can mark payments. Doctors see payment status as read-only. Enforced by database trigger. See `docs/decisions/007-payment-permissions.md`.
 
-### n8n Workflows
-One workflow per clinic (not shared). Each clinic has its own WhatsApp number and webhook URL. See `docs/decisions/006-n8n-per-clinic.md`.
+### Python AI Backend
+A separate FastAPI service handles all AI, WhatsApp, and automation. It talks directly to Supabase with `service_role` key (no Next.js middleman). LangChain orchestrates the AI agent with tools for booking, cancellation, RAG, patient queries. Celery + Redis handles scheduled reminders. See `docs/decisions/012-python-ai-backend.md`.
 
 ### WhatsApp Connection
 Initially via external BSP (YCloud or similar) — becoming Meta Tech Provider is deferred. Clinics connect via BSP's platform, credentials stored in `clinics` table. Coexistence mode: clinic keeps WhatsApp Business app while API runs in parallel. See `docs/decisions/008-whatsapp-bsp.md`.
@@ -72,14 +72,14 @@ tools/scripts/           # Utility scripts (seed, create-user, create-clinic, re
 supabase/migrations/     # SQL migration files
 src/app/(auth)/          # Login page (staff only)
 src/app/(dashboard)/     # Dashboard pages (calendar, appointments, patients, etc.)
-src/app/api/             # API routes (appointments, patients, waitlist, reminders, chatbot)
+src/app/api/             # API routes (appointments, patients, waitlist, doctors, reports)
 src/components/          # React components organized by feature
 src/lib/                 # Supabase clients, hooks, types, utils, constants
 src/providers/           # AuthProvider, ClinicProvider, RealtimeProvider
 middleware.ts            # Auth redirect + role-based route guards
 ```
 
-## Database Tables (12)
+## Database Tables (16)
 
 1. `clinics` — tenant config
 2. `staff` — staff identity (global)
@@ -93,6 +93,10 @@ middleware.ts            # Auth redirect + role-based route guards
 10. `waitlist` — patients waiting for openings
 11. `appointment_history` — immutable audit log
 12. `reminders` — outbound communication tracking
+13. `clinic_faqs` — admin-managed FAQ entries per clinic (for RAG)
+14. `clinic_services` — services offered per clinic (for RAG + future billing)
+15. `document_embeddings` — pgvector store for RAG (clinic-scoped embeddings)
+16. `conversation_sessions` — completed WhatsApp conversations (analytics)
 
 ## Database Functions
 
@@ -102,6 +106,7 @@ middleware.ts            # Auth redirect + role-based route guards
 - `check_appointment_overlap()` — trigger preventing double-booking
 - `check_payment_update()` — trigger restricting payment changes to admin/secretary
 - `update_no_show_count()` — trigger auto-incrementing clinic_patients.no_show_count
+- `match_clinic_documents(query_embedding, clinic_id, count)` — pgvector similarity search filtered by clinic_id
 
 ## UI Design
 
@@ -150,6 +155,23 @@ Explain in dependency order: database changes → API routes → hooks → compo
 - `docs/system-design.md` — backend data flow, auth flow, appointment lifecycle
 - `docs/design-system.md` — colors, typography, spacing, component guidelines
 - `docs/plan.md` — master implementation plan
+
+## Second Brain (Obsidian)
+
+Project notes live in `C:\Users\UPCN\OneDrive\SecondBrain\01-Projects\UPCN\Turnera\`.
+Everything related to this project (turnera, sanatorio system, research) goes in that ONE folder — do NOT create separate project folders.
+Key files:
+- `turnera-overview.md` — general project overview
+- `sanatorio-system-overview.md` — medical imaging/clinic management module (PACS replacement for Sanatorio UPCN)
+- `sanatorio-research-backlog.md` — deep research topics pending (DICOM, RIS, legal, AI dictation, etc.)
+
+## Sanatorio Features (Phase 5)
+
+Turnera will expand with sanatorio-grade features — these are NOT a separate project, they're additional modules for Turnera:
+- Imaging/PACS replacement, patient flow, billing, AI dictation, patient portal
+- First deployment: Sanatorio de UPCN (director: Cittadino, via José Allende who is the boss at UPCN and Geronimo's dad)
+- Sanatorio Allende = reference/inspiration only, NOT a client
+- Status: research phase — see `sanatorio-research-backlog.md` in Second Brain
 
 ## Deployment
 

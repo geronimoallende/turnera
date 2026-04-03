@@ -54,14 +54,12 @@ export default function PatientsPage() {
       {/* Header: title + new patient button */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-[#1a1a1a]">Patients</h1>
-        {/* render={<Link>} makes the Button behave as a navigation link */}
-        <Button
-          render={<Link href="/patients/new" />}
-          className="bg-blue-500 shadow-none hover:bg-blue-600"
-        >
-          <Plus className="mr-1.5 h-4 w-4" />
-          New Patient
-        </Button>
+        <Link href="/patients/new">
+          <Button className="bg-blue-500 shadow-none hover:bg-blue-600">
+            <Plus className="mr-1.5 h-4 w-4" />
+            New Patient
+          </Button>
+        </Link>
       </div>
 
       {/* Search bar */}

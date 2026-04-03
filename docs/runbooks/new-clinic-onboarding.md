@@ -22,12 +22,16 @@
    npx tsx tools/scripts/create-user.ts --email secretaria@clinicasalud.com --role secretary --clinic <clinic_id>
    ```
 
-5. **Set up n8n workflows** (per-clinic)
-   - Duplicate CB-6 template workflow in n8n
-   - Update webhook URL and WhatsApp number
-   - Save webhook URL to `clinics.n8n_webhook_url`
+5. **Connect WhatsApp via YCloud BSP**
+   - Set up clinic's WhatsApp number in YCloud
+   - Save `whatsapp_number` and BSP credentials in `clinics` table
+   - Update `whatsapp_status` to `'connected'`
 
-6. **Configure business hours**
+6. **Sync clinic data for RAG**
+   - Trigger embedding sync: `POST https://ai.turnera.app/internal/embeddings/sync` with clinic_id
+   - Add clinic FAQs via admin panel (services, insurance, preparation instructions)
+
+7. **Configure business hours**
    - Admin logs in → Settings → Business Hours
 
 7. **Test**

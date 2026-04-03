@@ -5,64 +5,54 @@
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────────────────────┐
 │   Browser   │────▶│   Vercel     │────▶│  Supabase                   │
-│  (Next.js)  │     │  (Hosting)   │     │  nzozdrakzqhvvmdgkqjh       │
+│  (Next.js)  │     │  (Hosting)   │     │  lavfzixecvbvdqxyiwwl       │
 │             │◀────│              │◀────│                             │
 └─────────────┘     └──────────────┘     │  ┌─────────────────────┐   │
-                                         │  │ PostgreSQL           │   │
-┌─────────────┐     ┌──────────────┐     │  │ + RLS Policies       │   │
-│  WhatsApp   │────▶│   n8n        │────▶│  │ + Realtime           │   │
-│  (Patients) │     │  (EasyPanel) │     │  │ + Functions          │   │
-│             │◀────│  1 WF/clinic │◀────│  └─────────────────────┘   │
-└─────────────┘     └──────────────┘     │  ┌─────────────────────┐   │
-                                         │  │ Auth (email/pass)    │   │
-                                         │  │ Staff-only login     │   │
-                                         │  └─────────────────────┘   │
-                                         │  ┌─────────────────────┐   │
-                                         │  │ Storage              │   │
-                                         │  │ (logos, documents)   │   │
-                                         │  └─────────────────────┘   │
-                                         └─────────────────────────────┘
+                      anon key + JWT     │  │ PostgreSQL           │   │
+                                         │  │ + RLS Policies       │   │
+┌─────────────┐     ┌──────────────┐     │  │ + Realtime           │   │
+│  WhatsApp   │────▶│  YCloud BSP  │────▶│  │ + pgvector           │   │
+│  (Patients) │     │  (routing)   │     │  │ + Functions          │   │
+│             │◀────│              │◀────│  └─────────────────────┘   │
+└─────────────┘     └──────┬───────┘     │  ┌──────────────┐          │
+                           │             │  │ Auth          │          │
+                           ▼             │  │ (staff-only)  │          │
+                    ┌──────────────┐     │  └──────────────┘          │
+                    │  VPS (Docker)│────▶│  ┌──────────────┐          │
+                    │  FastAPI     │     │  │ Storage       │          │
+                    │  + LangChain │◀────│  │ (logos, docs) │          │
+                    │  + Celery    │     │  └──────────────┘          │
+                    │  + Redis     │     └─────────────────────────────┘
+                    └──────────────┘
+                      service_role key
 ```
 
 ## Data Flow
 
 1. **Staff logs in** → Supabase Auth → JWT with `auth.uid()` → RLS filters data by clinic
 2. **Staff creates appointment** → Next.js API route → Supabase INSERT → Realtime broadcasts to other tabs
-3. **Patient contacts via WhatsApp** → n8n workflow (per-clinic) → calls Next.js API route (`/api/chatbot/*`) → API route uses Supabase admin client → Book/cancel/confirm
-4. **Reminder system** → n8n scheduled workflow (per-clinic) → calls Next.js API route → Checks upcoming appointments → Sends WhatsApp/email via BSP
+3. **Patient sends WhatsApp** → YCloud BSP → FastAPI webhook on VPS → LangChain AI agent → calls Supabase directly (service_role key) → Book/cancel/confirm → responds via YCloud API
+4. **Automated reminders** → Celery Beat (cron) → Celery Worker → queries Supabase for pending reminders → sends WhatsApp via YCloud → updates reminders table
+5. **Patient asks FAQ** → WhatsApp → FastAPI → LangChain agent → RAG search (pgvector filtered by clinic_id) → LLM generates answer → WhatsApp response
 
-## n8n ↔ API Communication
+## Python AI Backend ↔ Supabase Communication
 
-n8n does NOT talk to Supabase directly. It calls our Next.js API routes instead. This ensures business logic (overlap checks, blacklist validation, overbooking limits) lives in ONE place — the API routes.
+The Python backend talks **directly** to Supabase with the `service_role` key (bypasses RLS). There is no Next.js middleman. Database triggers enforce all business rules regardless of caller:
 
-```
-n8n workflow                         Next.js API route
-─────────────                        ──────────────────
-Receives WhatsApp msg
-Parses patient intent
-    │
-    ├─► POST /api/chatbot/book  ──►  Check blacklist
-        { clinic_id,                  Check overlap
-          patient_phone,              Check overbooking limit
-          doctor_id,                  Create patient (upsert by DNI)
-          date, time }                Create appointment
-                                      Create reminder
-        x-webhook-secret header       Update waitlist
-                                          │
-                                          ▼
-                                      Supabase (admin client,
-                                      bypasses RLS)
-```
+- `check_appointment_overlap()` — prevents double-booking
+- `check_payment_update()` — restricts payment changes to admin/secretary
+- `update_no_show_count()` — auto-increments no-show count
 
-Authentication: `x-webhook-secret` header validated against `process.env.N8N_WEBHOOK_SECRET`. Inside the route, a Supabase admin client (service_role key) is used because n8n is not a logged-in user.
+Authentication for the webhook endpoint uses YCloud's HMAC-SHA256 signature verification on each request.
 
 ## Multi-Tenant Isolation
 
-- Global entities: `patients`, `staff`, `doctors` (shared across clinics)
-- Junction tables: `clinic_patients`, `staff_clinics`, `doctor_clinic_settings` (per-clinic metadata)
-- Per-clinic entities: `appointments`, `waitlist`, `reminders`, etc. (always have `clinic_id`)
-- RLS enforces isolation: `clinic_id = ANY(get_user_clinic_ids())`
-- n8n goes through API routes; API routes use admin client with explicit `clinic_id` in every query
+- Global entities: `staff`, `doctors` (shared across clinics)
+- Junction tables: `staff_clinics`, `doctor_clinic_settings` (per-clinic metadata)
+- Per-clinic entities: `appointments`, `waitlist`, `reminders`, `clinic_patients`, `clinic_faqs`, `clinic_services`, `document_embeddings`, `conversation_sessions`, etc. (always have `clinic_id`)
+- RLS enforces isolation for web UI: `clinic_id = ANY(get_user_clinic_ids())`
+- Python backend includes `clinic_id` explicitly in every query (service_role bypasses RLS)
+- RAG vector search filtered by `clinic_id` — each clinic's knowledge base is isolated
 
 ## Frontend Architecture
 

@@ -20,4 +20,4 @@ Start with an external BSP (YCloud or similar). Each clinic connects via the BSP
 - Dependency on BSP's uptime and API
 - Faster time-to-market
 - Each clinic's BSP credentials stored securely in `clinics` table
-- n8n workflows use BSP's API endpoints
+- Python AI backend uses BSP's API endpoints via httpx

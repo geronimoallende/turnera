@@ -17,4 +17,4 @@ Use `clinic_id` column on per-clinic tables + RLS policies filtering by `clinic_
 ## Consequences
 - All data in one database, easy to query across clinics if needed (admin/superadmin)
 - RLS must be correct — a policy bug could leak data
-- n8n uses `service_role` key and must always include `clinic_id` in queries
+- Python AI backend uses `service_role` key and must always include `clinic_id` in queries

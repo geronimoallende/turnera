@@ -33,14 +33,14 @@ scheduled → confirmed → arrived → in_progress → completed
    - **No**: INSERT into `clinic_patients` with default metadata
 4. Return the patient with clinic-specific metadata
 
-## Reminder System (n8n)
+## Reminder System (Celery + Redis on Python VPS)
 
-Per-clinic CB-7 workflow runs on schedule:
-1. Query appointments WHERE `reminder_24h_sent_at IS NULL` AND date = tomorrow
-2. For each: send WhatsApp via clinic's WhatsApp number
+Celery Beat scheduler runs periodic tasks:
+1. **24h reminders** (every 15 min): Query appointments WHERE `reminder_24h_sent_at IS NULL` AND date = tomorrow
+2. For each: send WhatsApp via YCloud BSP API using clinic's WhatsApp number
 3. Update `reminder_24h_sent_at` timestamp
-4. Parse patient responses (confirm/cancel/reschedule)
-5. Update appointment status accordingly
+4. **Same-day reminders** (7:00 AM ART daily): Send morning reminder batch
+5. Patient responses arrive via WhatsApp webhook → AI agent processes confirm/cancel/reschedule
 
 ## Reports (On-the-Fly)
 

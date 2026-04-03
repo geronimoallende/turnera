@@ -1,7 +1,7 @@
 # ADR-006: One n8n Workflow Per Clinic
 
 ## Status
-Accepted
+Superseded by [ADR-012: Python AI Backend](012-python-ai-backend.md)
 
 ## Context
 n8n handles the WhatsApp chatbot and reminder system. Should workflows be shared across all clinics or isolated per clinic?

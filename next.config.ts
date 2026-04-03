@@ -15,8 +15,6 @@ import { withSentryConfig } from "@sentry/nextjs"
  *    - Sentry's webpack plugin instruments the code (auto-captures errors)
  */
 const nextConfig: NextConfig = {
-  devIndicators: false,
-
   // headers() returns an array of header rules.
   // Each rule has a "source" (which URLs it applies to) and "headers" (what to add).
   headers: async () => [
