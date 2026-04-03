@@ -20,8 +20,9 @@
  * and any child component can read it with useContext().
  */
 
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { logger } from "@/lib/logger"
 import type { User } from "@supabase/supabase-js"
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -84,45 +85,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const supabase = createClient()
 
     async function loadUser() {
-      // Step 1: Ask Supabase Auth "who is logged in?"
-      // getUser() checks the JWT token stored in cookies
-      const { data: { user: authUser } } = await supabase.auth.getUser()
+      try {
+        // Step 1: Ask Supabase Auth "who is logged in?"
+        // getUser() checks the JWT token stored in cookies
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
 
-      if (!authUser) {
-        // No one is logged in
-        setIsLoading(false)
-        return
-      }
+        if (authError || !authUser) {
+          // No one is logged in, or auth check failed
+          // (finally block will set isLoading = false)
+          return
+        }
 
-      setUser(authUser)
+        setUser(authUser)
 
-      // Step 2: Fetch the staff record for this auth user
-      // .eq() means "where auth_user_id equals this value"
-      // .single() means "I expect exactly one result"
-      const { data: staff } = await supabase
-        .from("staff")
-        .select("id, auth_user_id, first_name, last_name, email")
-        .eq("auth_user_id", authUser.id)
-        .single()
+        // Step 2: Fetch the staff record for this auth user
+        // .eq() means "where auth_user_id equals this value"
+        // .single() means "I expect exactly one result"
+        const { data: staff, error: staffError } = await supabase
+          .from("staff")
+          .select("id, auth_user_id, first_name, last_name, email")
+          .eq("auth_user_id", authUser.id)
+          .single()
 
-      if (staff) {
+        if (staffError || !staff) {
+          // Staff record not found — user exists in Auth but not in staff table
+          // (finally block will set isLoading = false)
+          logger.error({ error: staffError?.message }, "Failed to load staff record")
+          return
+        }
+
         setStaffRecord(staff)
 
         // Step 3: Fetch which clinics this staff member belongs to
         // The select joins staff_clinics with clinics to get clinic names
         // clinics(id, name, slug) means: "also fetch the related clinic data"
-        const { data: clinics } = await supabase
+        const { data: clinics, error: clinicsError } = await supabase
           .from("staff_clinics")
           .select("clinic_id, role, clinics(id, name, slug)")
           .eq("staff_id", staff.id)
 
-        if (clinics) {
+        if (clinicsError) {
+          logger.error({ error: clinicsError.message }, "Failed to load staff clinics")
+        } else if (clinics) {
           // TypeScript needs us to cast because Supabase returns a generic type
           setStaffClinics(clinics as unknown as StaffClinic[])
         }
+      } catch (err) {
+        // Catch any unexpected error (network failure, timeout, etc.)
+        // so setIsLoading(false) ALWAYS runs and the UI never gets stuck
+        logger.error({ error: err instanceof Error ? err.message : String(err) }, "Auth loading failed")
+      } finally {
+        // finally {} runs no matter what — whether the try succeeded or
+        // threw an error. This guarantees isLoading becomes false.
+        setIsLoading(false)
       }
-
-      setIsLoading(false)
     }
 
     loadUser()
@@ -148,8 +164,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []) // Empty array = run only once on mount
 
+  // useMemo prevents creating a new object on every render.
+  // Without it, every time AuthProvider re-renders (e.g., parent state changes),
+  // ALL components using useAuth() would re-render too — even if none of the
+  // auth values actually changed. useMemo only creates a new object when one
+  // of the listed dependencies [user, staffRecord, staffClinics, isLoading] changes.
+  const value = useMemo(
+    () => ({ user, staffRecord, staffClinics, isLoading }),
+    [user, staffRecord, staffClinics, isLoading]
+  )
+
   return (
-    <AuthContext.Provider value={{ user, staffRecord, staffClinics, isLoading }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )
