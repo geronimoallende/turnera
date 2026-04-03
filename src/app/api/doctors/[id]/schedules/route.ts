@@ -22,6 +22,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { checkDoctorPermission } from "@/lib/auth/check-doctor-permission"
+import { withErrorHandler, ApiError } from "@/lib/error-handler"
 
 // ─── Validation Schemas ───────────────────────────────────────────
 
@@ -44,23 +45,14 @@ const createSchema = z.object({
 
 // ─── GET: List schedule blocks ────────────────────────────────────
 
-export async function GET(
+export const GET = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params
+  context
+) => {
+  const { id } = await context!.params
 
   const rawParams = Object.fromEntries(request.nextUrl.searchParams)
-  const parsed = listSchema.safeParse(rawParams)
-
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues },
-      { status: 400 }
-    )
-  }
-
-  const { clinic_id } = parsed.data
+  const { clinic_id } = listSchema.parse(rawParams)
 
   const supabase = await createClient()
 
@@ -73,30 +65,21 @@ export async function GET(
     .order("start_time", { ascending: true })
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new ApiError(error.message, 500, "INTERNAL_ERROR")
   }
 
   return NextResponse.json({ data })
-}
+})
 
 // ─── POST: Create a schedule block ───────────────────────────────
 
-export async function POST(
+export const POST = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params
+  context
+) => {
+  const { id } = await context!.params
 
   const body = await request.json()
-  const parsed = createSchema.safeParse(body)
-
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues },
-      { status: 400 }
-    )
-  }
-
   const {
     clinic_id,
     day_of_week,
@@ -105,15 +88,12 @@ export async function POST(
     slot_duration_minutes,
     valid_from,
     valid_until,
-  } = parsed.data
+  } = createSchema.parse(body)
 
   // 1. Validate that end_time comes after start_time.
   //    We compare as strings — "09:00" < "17:30" works lexicographically for HH:MM.
   if (end_time <= start_time) {
-    return NextResponse.json(
-      { error: "end_time must be after start_time" },
-      { status: 400 }
-    )
+    throw new ApiError("end_time must be after start_time", 400, "VALIDATION_ERROR")
   }
 
   const supabase = await createClient()
@@ -122,7 +102,7 @@ export async function POST(
   //    Admin can manage any doctor's schedule. A doctor can manage only their own.
   const permission = await checkDoctorPermission(supabase, clinic_id, id)
   if (!permission.authorized) {
-    return NextResponse.json({ error: permission.error }, { status: permission.status })
+    throw new ApiError(permission.error, permission.status, "FORBIDDEN")
   }
 
   // 3. Check for overlapping schedule blocks on the same day.
@@ -139,17 +119,11 @@ export async function POST(
     .gt("end_time", start_time)   // existing block ends after new block starts
 
   if (overlapError) {
-    return NextResponse.json({ error: overlapError.message }, { status: 500 })
+    throw new ApiError(overlapError.message, 500, "INTERNAL_ERROR")
   }
 
   if (overlapping && overlapping.length > 0) {
-    return NextResponse.json(
-      {
-        error: "Schedule block overlaps with an existing block on this day",
-        conflicts: overlapping,
-      },
-      { status: 409 }
-    )
+    throw new ApiError("Schedule block overlaps with an existing block on this day", 409, "SCHEDULE_OVERLAP")
   }
 
   // 4. Resolve slot duration — use provided value or fall back to doctor's default
@@ -184,8 +158,8 @@ export async function POST(
     .single()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new ApiError(error.message, 500, "INTERNAL_ERROR")
   }
 
   return NextResponse.json({ data }, { status: 201 })
-}
+})

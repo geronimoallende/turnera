@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { checkDoctorPermission } from "@/lib/auth/check-doctor-permission"
+import { withErrorHandler, ApiError } from "@/lib/error-handler"
 
 // ─── Validation Schemas ───────────────────────────────────────────
 
@@ -37,29 +38,17 @@ const updateSchema = z.object({
 
 // ─── PUT: Update a schedule block ────────────────────────────────
 
-export async function PUT(
+export const PUT = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string; scheduleId: string }> }
-) {
-  const { id, scheduleId } = await params
+  context
+) => {
+  const { id, scheduleId } = await context!.params
 
   const body = await request.json()
-  const parsed = updateSchema.safeParse(body)
-
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues },
-      { status: 400 }
-    )
-  }
-
-  const { clinic_id, ...updateData } = parsed.data
+  const { clinic_id, ...updateData } = updateSchema.parse(body)
 
   if (Object.keys(updateData).length === 0) {
-    return NextResponse.json(
-      { error: "No fields to update" },
-      { status: 400 }
-    )
+    throw new ApiError("No fields to update", 400, "VALIDATION_ERROR")
   }
 
   // Validate end_time > start_time if both are provided together.
@@ -67,10 +56,7 @@ export async function PUT(
   // we skip that check here and rely on the DB constraint / schedule logic.
   if (updateData.start_time && updateData.end_time) {
     if (updateData.end_time <= updateData.start_time) {
-      return NextResponse.json(
-        { error: "end_time must be after start_time" },
-        { status: 400 }
-      )
+      throw new ApiError("end_time must be after start_time", 400, "VALIDATION_ERROR")
     }
   }
 
@@ -79,7 +65,7 @@ export async function PUT(
   // Verify the caller has permission to update this doctor's schedule.
   const permission = await checkDoctorPermission(supabase, clinic_id, id)
   if (!permission.authorized) {
-    return NextResponse.json({ error: permission.error }, { status: permission.status })
+    throw new ApiError(permission.error, permission.status, "FORBIDDEN")
   }
 
   // Update the row, filtering by scheduleId + doctor_id + clinic_id for safety.
@@ -92,7 +78,7 @@ export async function PUT(
     .eq("clinic_id", clinic_id)
 
   if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 })
+    throw new ApiError(updateError.message, 500, "INTERNAL_ERROR")
   }
 
   // Re-fetch the updated row to return the latest state
@@ -103,27 +89,24 @@ export async function PUT(
     .single()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new ApiError(error.message, 500, "INTERNAL_ERROR")
   }
 
   return NextResponse.json({ data })
-}
+})
 
 // ─── DELETE: Delete a schedule block ─────────────────────────────
 
-export async function DELETE(
+export const DELETE = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string; scheduleId: string }> }
-) {
-  const { id, scheduleId } = await params
+  context
+) => {
+  const { id, scheduleId } = await context!.params
 
   // clinic_id comes as a query param since DELETE requests have no body
   const clinic_id = request.nextUrl.searchParams.get("clinic_id")
   if (!clinic_id) {
-    return NextResponse.json(
-      { error: "clinic_id query parameter is required" },
-      { status: 400 }
-    )
+    throw new ApiError("clinic_id query parameter is required", 400, "VALIDATION_ERROR")
   }
 
   const supabase = await createClient()
@@ -131,7 +114,7 @@ export async function DELETE(
   // Verify the caller has permission to delete this doctor's schedule block.
   const permission = await checkDoctorPermission(supabase, clinic_id, id)
   if (!permission.authorized) {
-    return NextResponse.json({ error: permission.error }, { status: permission.status })
+    throw new ApiError(permission.error, permission.status, "FORBIDDEN")
   }
 
   const { error } = await supabase
@@ -142,11 +125,11 @@ export async function DELETE(
     .eq("clinic_id", clinic_id)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new ApiError(error.message, 500, "INTERNAL_ERROR")
   }
 
   return NextResponse.json(
     { message: "Schedule block deleted" },
     { status: 200 }
   )
-}
+})

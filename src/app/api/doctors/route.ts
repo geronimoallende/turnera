@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { withErrorHandler, ApiError } from "@/lib/error-handler"
 
 // ─── Validation Schema ────────────────────────────────────────────
 
@@ -24,19 +25,10 @@ const listSchema = z.object({
 
 // ─── GET: List doctors at a clinic ───────────────────────────────
 
-export async function GET(request: NextRequest) {
+export const GET = withErrorHandler(async (request: NextRequest) => {
   // 1. Parse and validate query parameters
   const params = Object.fromEntries(request.nextUrl.searchParams)
-  const parsed = listSchema.safeParse(params)
-
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues },
-      { status: 400 }
-    )
-  }
-
-  const { clinic_id } = parsed.data
+  const { clinic_id } = listSchema.parse(params)
 
   // 2. Create a server-side Supabase client (reads JWT from cookies)
   const supabase = await createClient()
@@ -71,7 +63,7 @@ export async function GET(request: NextRequest) {
     .order("is_active", { ascending: false })
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new ApiError(error.message, 500, "DB_ERROR")
   }
 
   // 4. Flatten the nested join response into a clean, flat array.
@@ -106,4 +98,4 @@ export async function GET(request: NextRequest) {
   })
 
   return NextResponse.json({ data: flattened })
-}
+})

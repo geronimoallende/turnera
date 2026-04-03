@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { checkDoctorPermission } from "@/lib/auth/check-doctor-permission"
+import { withErrorHandler, ApiError } from "@/lib/error-handler"
 
 // ─── Validation Schema ────────────────────────────────────────────
 
@@ -31,32 +32,19 @@ const updateSettingsSchema = z.object({
 
 // ─── PUT: Update clinic-specific doctor settings ──────────────────
 
-export async function PUT(
+export const PUT = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params
+  context
+) => {
+  const { id } = await context!.params
 
   // 1. Parse and validate the body
   const body = await request.json()
-  const parsed = updateSettingsSchema.safeParse(body)
-
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues },
-      { status: 400 }
-    )
-  }
-
-  // 2. Separate clinic_id from the fields to update
-  const { clinic_id, ...updateData } = parsed.data
+  const { clinic_id, ...updateData } = updateSettingsSchema.parse(body)
 
   // 3. Check there's at least one field to update
   if (Object.keys(updateData).length === 0) {
-    return NextResponse.json(
-      { error: "No fields to update" },
-      { status: 400 }
-    )
+    throw new ApiError("No fields to update", 400, "VALIDATION_ERROR")
   }
 
   const supabase = await createClient()
@@ -65,7 +53,7 @@ export async function PUT(
   //    Doctors can adjust their own schedule/profile but not clinic-level config.
   const permission = await checkDoctorPermission(supabase, clinic_id, id, true)
   if (!permission.authorized) {
-    return NextResponse.json({ error: permission.error }, { status: permission.status })
+    throw new ApiError(permission.error, permission.status, "FORBIDDEN")
   }
 
   // 5. Update the settings row, filtered by both doctor_id and clinic_id.
@@ -77,7 +65,7 @@ export async function PUT(
     .eq("clinic_id", clinic_id)
 
   if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 })
+    throw new ApiError(updateError.message, 500, "INTERNAL_ERROR")
   }
 
   // 6. Re-fetch the updated row to return the latest state
@@ -103,8 +91,8 @@ export async function PUT(
     .single()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new ApiError(error.message, 500, "INTERNAL_ERROR")
   }
 
   return NextResponse.json({ data })
-}
+})

@@ -12,22 +12,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { checkDoctorPermission } from "@/lib/auth/check-doctor-permission"
+import { withErrorHandler, ApiError } from "@/lib/error-handler"
 
 // ─── DELETE: Delete an override ───────────────────────────────────
 
-export async function DELETE(
+export const DELETE = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string; overrideId: string }> }
-) {
-  const { id, overrideId } = await params
+  context
+) => {
+  const { id, overrideId } = await context!.params
 
   // clinic_id comes as a query param since DELETE requests have no body
   const clinic_id = request.nextUrl.searchParams.get("clinic_id")
   if (!clinic_id) {
-    return NextResponse.json(
-      { error: "clinic_id query parameter is required" },
-      { status: 400 }
-    )
+    throw new ApiError("clinic_id query parameter is required", 400, "VALIDATION_ERROR")
   }
 
   const supabase = await createClient()
@@ -35,7 +33,7 @@ export async function DELETE(
   // Verify the caller has permission to delete this doctor's override.
   const permission = await checkDoctorPermission(supabase, clinic_id, id)
   if (!permission.authorized) {
-    return NextResponse.json({ error: permission.error }, { status: permission.status })
+    throw new ApiError(permission.error, permission.status, "FORBIDDEN")
   }
 
   const { error } = await supabase
@@ -46,11 +44,11 @@ export async function DELETE(
     .eq("clinic_id", clinic_id)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new ApiError(error.message, 500, "INTERNAL_ERROR")
   }
 
   return NextResponse.json(
     { message: "Override deleted" },
     { status: 200 }
   )
-}
+})

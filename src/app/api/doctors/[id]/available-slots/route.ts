@@ -23,6 +23,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { withErrorHandler, ApiError } from "@/lib/error-handler"
 
 // ─── Validation Schema ────────────────────────────────────────────
 
@@ -35,32 +36,20 @@ const querySchema = z.object({
 
 // ─── GET: Fetch available time slots ─────────────────────────────
 
-export async function GET(
+export const GET = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id: doctorId } = await params
+  context
+) => {
+  const { id: doctorId } = await context!.params
 
   // 1. Parse and validate query parameters
   const rawParams = Object.fromEntries(request.nextUrl.searchParams)
-  const parsed = querySchema.safeParse(rawParams)
-
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues },
-      { status: 400 }
-    )
-  }
-
-  const { clinic_id, date } = parsed.data
+  const { clinic_id, date } = querySchema.parse(rawParams)
 
   // 2. Validate that date is today or in the future
   const today = new Date().toISOString().split("T")[0]
   if (date < today) {
-    return NextResponse.json(
-      { error: "date cannot be in the past" },
-      { status: 400 }
-    )
+    throw new ApiError("date cannot be in the past", 400, "VALIDATION_ERROR")
   }
 
   const supabase = await createClient()
@@ -74,10 +63,7 @@ export async function GET(
     .single()
 
   if (clinicError || !clinic) {
-    return NextResponse.json(
-      { error: "Clinic not found" },
-      { status: 404 }
-    )
+    throw new ApiError("Clinic not found", 404, "NOT_FOUND")
   }
 
   const maxDate = new Date()
@@ -85,11 +71,10 @@ export async function GET(
   const maxDateStr = maxDate.toISOString().split("T")[0]
 
   if (date > maxDateStr) {
-    return NextResponse.json(
-      {
-        error: `date cannot be more than ${clinic.max_booking_days_ahead} days ahead`,
-      },
-      { status: 400 }
+    throw new ApiError(
+      `date cannot be more than ${clinic.max_booking_days_ahead} days ahead`,
+      400,
+      "VALIDATION_ERROR"
     )
   }
 
@@ -105,8 +90,8 @@ export async function GET(
   })
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new ApiError(error.message, 500, "INTERNAL_ERROR")
   }
 
   return NextResponse.json({ data: slots })
-}
+})

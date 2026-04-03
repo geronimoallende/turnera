@@ -25,6 +25,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { checkDoctorPermission } from "@/lib/auth/check-doctor-permission"
+import { withErrorHandler, ApiError } from "@/lib/error-handler"
 
 // ─── Validation Schemas ───────────────────────────────────────────
 
@@ -46,23 +47,14 @@ const createSchema = z.object({
 
 // ─── GET: List upcoming overrides ────────────────────────────────
 
-export async function GET(
+export const GET = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params
+  context
+) => {
+  const { id } = await context!.params
 
   const rawParams = Object.fromEntries(request.nextUrl.searchParams)
-  const parsed = listSchema.safeParse(rawParams)
-
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues },
-      { status: 400 }
-    )
-  }
-
-  const { clinic_id } = parsed.data
+  const { clinic_id } = listSchema.parse(rawParams)
 
   const supabase = await createClient()
 
@@ -78,30 +70,21 @@ export async function GET(
     .order("override_date", { ascending: true })
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new ApiError(error.message, 500, "INTERNAL_ERROR")
   }
 
   return NextResponse.json({ data })
-}
+})
 
 // ─── POST: Create an override ─────────────────────────────────────
 
-export async function POST(
+export const POST = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params
+  context
+) => {
+  const { id } = await context!.params
 
   const body = await request.json()
-  const parsed = createSchema.safeParse(body)
-
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues },
-      { status: 400 }
-    )
-  }
-
   const {
     clinic_id,
     override_date,
@@ -109,23 +92,17 @@ export async function POST(
     start_time,
     end_time,
     reason,
-  } = parsed.data
+  } = createSchema.parse(body)
 
   // 1. Validate date is today or in the future (can't modify the past)
   const today = new Date().toISOString().split("T")[0]
   if (override_date < today) {
-    return NextResponse.json(
-      { error: "override_date cannot be in the past" },
-      { status: 400 }
-    )
+    throw new ApiError("override_date cannot be in the past", 400, "VALIDATION_ERROR")
   }
 
   // 2. Validate end_time > start_time if a partial time range is provided
   if (start_time && end_time && end_time <= start_time) {
-    return NextResponse.json(
-      { error: "end_time must be after start_time" },
-      { status: 400 }
-    )
+    throw new ApiError("end_time must be after start_time", 400, "VALIDATION_ERROR")
   }
 
   const supabase = await createClient()
@@ -134,7 +111,7 @@ export async function POST(
   //    Admin can manage any doctor's overrides. A doctor can manage only their own.
   const permission = await checkDoctorPermission(supabase, clinic_id, id)
   if (!permission.authorized) {
-    return NextResponse.json({ error: permission.error }, { status: permission.status })
+    throw new ApiError(permission.error, permission.status, "FORBIDDEN")
   }
 
   // 4. Validate date is within the clinic's booking window.
@@ -147,10 +124,7 @@ export async function POST(
     .single()
 
   if (clinicError || !clinic) {
-    return NextResponse.json(
-      { error: "Clinic not found" },
-      { status: 404 }
-    )
+    throw new ApiError("Clinic not found", 404, "NOT_FOUND")
   }
 
   const maxDate = new Date()
@@ -158,11 +132,10 @@ export async function POST(
   const maxDateStr = maxDate.toISOString().split("T")[0]
 
   if (override_date > maxDateStr) {
-    return NextResponse.json(
-      {
-        error: `override_date cannot be more than ${clinic.max_booking_days_ahead} days ahead`,
-      },
-      { status: 400 }
+    throw new ApiError(
+      `override_date cannot be more than ${clinic.max_booking_days_ahead} days ahead`,
+      400,
+      "VALIDATION_ERROR"
     )
   }
 
@@ -182,8 +155,8 @@ export async function POST(
     .single()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new ApiError(error.message, 500, "INTERNAL_ERROR")
   }
 
   return NextResponse.json({ data }, { status: 201 })
-}
+})
