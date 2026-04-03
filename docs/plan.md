@@ -280,8 +280,8 @@ RLS: SELECT by clinic admin who invited + the invited doctor. INSERT by clinic a
 
 ### Migrations
 
-1. `supabase db pull` → `001_baseline.sql` (commit existing schema)
-2. `017_create_patient_history.sql`
+1. `001_baseline.sql` ✅ (full schema: 14 enums, 17 tables, 37 FKs, 9 functions, 37 RLS policies)
+2. `017_create_patient_history.sql` ✅ (audit table + trigger, applied to production)
 3. `018_create_doctor_functions.sql` — `create_doctor_at_clinic()` + `link_doctor_to_clinic()` SECURITY DEFINER functions
 4. `019_add_entreturno_rendicion.sql`
 5. `020_add_bsuid_fields.sql`
@@ -294,21 +294,27 @@ RLS: SELECT by clinic admin who invited + the invited doctor. INSERT by clinic a
 
 ### Phase 1: Core MVP (Weeks 1-6)
 
-**Week 1: Foundation + Observability** (partially done)
+**Week 1: Foundation + Observability** ✅ DONE
 
 - [x] Next.js + Supabase + Auth + Login + Seed
-- [ ] Pull migrations to git (`001_baseline.sql`)
-- [ ] Sentry (`@sentry/nextjs`)
-- [ ] Pino logger
-- [ ] `instrumentation.ts` (OTel)
-- [ ] Error boundaries (`global-error.tsx`, `error.tsx`)
-- [ ] `withErrorHandler()` wrapper
-- [ ] Security headers + CVE-2025-29927 check
-- [ ] Migration 017: `patient_history`
+- [x] Sentry (`@sentry/nextjs` — client, server, edge configs)
+- [x] Pino structured logger (`src/lib/logger.ts`)
+- [x] `instrumentation.ts` (OTel)
+- [x] Error boundaries (`global-error.tsx` + `(dashboard)/error.tsx`)
+- [x] `withErrorHandler()` wrapper (`src/lib/error-handler.ts`)
+- [x] Security headers + Sentry webpack config (`next.config.ts`)
+- [x] Migration 017: `patient_history` (audit trail, Ley 26.529)
+- [x] Migration README + developer setup guide
+- [x] Pull baseline migrations to git (`001_baseline.sql` — 1285 lines, full schema)
 
 **Week 2: Patients** ✅ DONE
 
-**Week 3: Doctors** (read side done, write side pending)
+- [x] Patient CRUD API (GET list, GET by id, POST create, PUT update)
+- [x] Patient components (table, search, form)
+- [x] Patient pages (list, detail, new)
+- [x] React Query hooks (`use-patients.ts`)
+
+**Week 3: Doctors** (read side ✅, write side pending)
 
 - [x] Doctor list API (GET /api/doctors)
 - [x] Doctor detail API (GET /api/doctors/[id])
@@ -316,8 +322,11 @@ RLS: SELECT by clinic admin who invited + the invited doctor. INSERT by clinic a
 - [x] Doctor schedules API (CRUD /api/doctors/[id]/schedules)
 - [x] Doctor overrides API (CRUD /api/doctors/[id]/overrides)
 - [x] Available slots API (GET /api/doctors/[id]/available-slots)
-- [x] Doctors list page + detail page UI
-- [ ] Migration: `create_doctor_at_clinic()` DB function (atomic, SECURITY DEFINER)
+- [x] Doctor components (table, profile form, schedule editor, override manager, clinic settings form, slots preview)
+- [x] Doctor pages (list, detail)
+- [x] React Query hooks (`use-doctors.ts`)
+- [x] Server-side role authorization on all doctor mutation endpoints
+- [ ] Migration 018: `create_doctor_at_clinic()` + `link_doctor_to_clinic()` DB functions (atomic, SECURITY DEFINER)
 - [ ] POST /api/doctors — create new doctor (auth + staff + staff_clinics + doctors + doctor_clinic_settings in one transaction)
 - [ ] POST /api/doctors/link — link existing doctor to a clinic (staff_clinics + doctor_clinic_settings)
 - [ ] POST /api/doctors/lookup — search by email, return minimal info (partial name + specialty only)
@@ -561,7 +570,7 @@ turnera/
 ### Timeline
 
 ```
-Phase 1: Core MVP          Weeks 1-6    (3 done, 3 remaining)
+Phase 1: Core MVP          Weeks 1-6    (Week 1-2 done, Week 3 partial, Weeks 4-6 remaining)
 Phase 2: Communications    Weeks 7-10
 Phase 3: CRM + Offline     Weeks 11-14
 Phase 4: Production        Weeks 15-17
