@@ -127,6 +127,11 @@ React Query (TanStack Query) for all data fetching from API routes. Provides cac
 - Prefer server components; use `"use client"` only when needed (interactivity, hooks)
 - API routes validate input with zod schemas
 
+## Workflow Rules
+
+- **Always update `docs/plan.md`** after completing any task. Mark checkboxes as done, update statuses, add notes. Commit and push the plan update together with the task commit or immediately after.
+- Never leave completed work untracked in the plan.
+
 ## Educational Context
 
 The user is learning web development through this project. When writing code:
