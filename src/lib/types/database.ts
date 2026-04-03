@@ -267,6 +267,50 @@ export type Database = {
           },
         ]
       }
+      clinic_faqs: {
+        Row: {
+          answer: string
+          category: string | null
+          clinic_id: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          question: string
+          sort_order: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          answer: string
+          category?: string | null
+          clinic_id: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          question: string
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          answer?: string
+          category?: string | null
+          clinic_id?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          question?: string
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_faqs_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clinic_patients: {
         Row: {
           allergies: string | null
@@ -362,6 +406,59 @@ export type Database = {
           },
         ]
       }
+      clinic_services: {
+        Row: {
+          clinic_id: string
+          created_at: string | null
+          description: string | null
+          duration_minutes: number | null
+          id: string
+          insurance_covered: boolean | null
+          is_active: boolean | null
+          name: string
+          preparation_instructions: string | null
+          price: number | null
+          requires_preparation: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string | null
+          description?: string | null
+          duration_minutes?: number | null
+          id?: string
+          insurance_covered?: boolean | null
+          is_active?: boolean | null
+          name: string
+          preparation_instructions?: string | null
+          price?: number | null
+          requires_preparation?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string | null
+          description?: string | null
+          duration_minutes?: number | null
+          id?: string
+          insurance_covered?: boolean | null
+          is_active?: boolean | null
+          name?: string
+          preparation_instructions?: string | null
+          price?: number | null
+          requires_preparation?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_services_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clinics: {
         Row: {
           address: string | null
@@ -375,17 +472,18 @@ export type Database = {
           logo_url: string | null
           max_booking_days_ahead: number
           min_booking_hours_ahead: number
-          n8n_webhook_secret: string | null
-          n8n_webhook_url: string | null
           name: string
           phone: string | null
           slug: string
           timezone: string
           updated_at: string | null
           whatsapp_business_id: string | null
+          whatsapp_connected_at: string | null
           whatsapp_number: string | null
           whatsapp_phone_number_id: string | null
+          whatsapp_status: string | null
           whatsapp_waba_id: string | null
+          ycloud_api_key: string | null
         }
         Insert: {
           address?: string | null
@@ -399,17 +497,18 @@ export type Database = {
           logo_url?: string | null
           max_booking_days_ahead?: number
           min_booking_hours_ahead?: number
-          n8n_webhook_secret?: string | null
-          n8n_webhook_url?: string | null
           name: string
           phone?: string | null
           slug: string
           timezone?: string
           updated_at?: string | null
           whatsapp_business_id?: string | null
+          whatsapp_connected_at?: string | null
           whatsapp_number?: string | null
           whatsapp_phone_number_id?: string | null
+          whatsapp_status?: string | null
           whatsapp_waba_id?: string | null
+          ycloud_api_key?: string | null
         }
         Update: {
           address?: string | null
@@ -423,19 +522,77 @@ export type Database = {
           logo_url?: string | null
           max_booking_days_ahead?: number
           min_booking_hours_ahead?: number
-          n8n_webhook_secret?: string | null
-          n8n_webhook_url?: string | null
           name?: string
           phone?: string | null
           slug?: string
           timezone?: string
           updated_at?: string | null
           whatsapp_business_id?: string | null
+          whatsapp_connected_at?: string | null
           whatsapp_number?: string | null
           whatsapp_phone_number_id?: string | null
+          whatsapp_status?: string | null
           whatsapp_waba_id?: string | null
+          ycloud_api_key?: string | null
         }
         Relationships: []
+      }
+      conversation_sessions: {
+        Row: {
+          clinic_id: string
+          created_at: string | null
+          ended_at: string | null
+          id: string
+          message_count: number | null
+          messages: Json
+          metadata: Json | null
+          outcome: string | null
+          patient_id: string | null
+          patient_phone: string
+          started_at: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string | null
+          ended_at?: string | null
+          id?: string
+          message_count?: number | null
+          messages?: Json
+          metadata?: Json | null
+          outcome?: string | null
+          patient_id?: string | null
+          patient_phone: string
+          started_at: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string | null
+          ended_at?: string | null
+          id?: string
+          message_count?: number | null
+          messages?: Json
+          metadata?: Json | null
+          outcome?: string | null
+          patient_id?: string | null
+          patient_phone?: string
+          started_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_sessions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_sessions_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "clinic_patients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       doctor_clinic_settings: {
         Row: {
@@ -595,6 +752,50 @@ export type Database = {
           },
         ]
       }
+      document_embeddings: {
+        Row: {
+          clinic_id: string
+          content: string
+          created_at: string | null
+          embedding: string
+          id: string
+          metadata: Json | null
+          source_id: string | null
+          source_type: string
+          updated_at: string | null
+        }
+        Insert: {
+          clinic_id: string
+          content: string
+          created_at?: string | null
+          embedding: string
+          id?: string
+          metadata?: Json | null
+          source_id?: string | null
+          source_type: string
+          updated_at?: string | null
+        }
+        Update: {
+          clinic_id?: string
+          content?: string
+          created_at?: string | null
+          embedding?: string
+          id?: string
+          metadata?: Json | null
+          source_id?: string | null
+          source_type?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_embeddings_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documents_pg: {
         Row: {
           embedding: string | null
@@ -616,23 +817,69 @@ export type Database = {
         }
         Relationships: []
       }
-      n8n_chat_histories: {
+      patient_history: {
         Row: {
-          id: number
-          message: Json
-          session_id: string
+          action: string
+          changed_fields: string[] | null
+          clinic_id: string
+          created_at: string
+          id: string
+          ip_address: string | null
+          new_values: Json | null
+          old_values: Json | null
+          patient_id: string
+          performed_by: string | null
+          performed_by_role: string | null
         }
         Insert: {
-          id?: number
-          message: Json
-          session_id: string
+          action: string
+          changed_fields?: string[] | null
+          clinic_id: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          new_values?: Json | null
+          old_values?: Json | null
+          patient_id: string
+          performed_by?: string | null
+          performed_by_role?: string | null
         }
         Update: {
-          id?: number
-          message?: Json
-          session_id?: string
+          action?: string
+          changed_fields?: string[] | null
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          new_values?: Json | null
+          old_values?: Json | null
+          patient_id?: string
+          performed_by?: string | null
+          performed_by_role?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "patient_history_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_history_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "clinic_patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_history_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       reminders: {
         Row: {
@@ -940,6 +1187,20 @@ export type Database = {
       get_user_role: {
         Args: { p_clinic_id: string }
         Returns: Database["public"]["Enums"]["staff_role"]
+      }
+      match_clinic_documents: {
+        Args: {
+          filter_source_types?: string[]
+          match_clinic_id: string
+          match_count?: number
+          query_embedding: string
+        }
+        Returns: {
+          content: string
+          id: string
+          metadata: Json
+          similarity: number
+        }[]
       }
     }
     Enums: {
