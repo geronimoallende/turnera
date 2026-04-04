@@ -84,6 +84,7 @@ export type Database = {
           completed_at: string | null
           confirmation_sent_at: string | null
           confirmed_at: string | null
+          coseguro_amount: number | null
           created_at: string | null
           created_by: string | null
           doctor_id: string
@@ -97,9 +98,11 @@ export type Database = {
           internal_notes: string | null
           invoice_number: string | null
           is_emergency: boolean | null
+          is_entreturno: boolean | null
           is_invoiced: boolean | null
           is_overbooking: boolean | null
           modality: Database["public"]["Enums"]["appointment_modality"]
+          order_number: string | null
           patient_id: string
           payment_status: Database["public"]["Enums"]["payment_status"]
           payment_updated_at: string | null
@@ -129,6 +132,7 @@ export type Database = {
           completed_at?: string | null
           confirmation_sent_at?: string | null
           confirmed_at?: string | null
+          coseguro_amount?: number | null
           created_at?: string | null
           created_by?: string | null
           doctor_id: string
@@ -142,9 +146,11 @@ export type Database = {
           internal_notes?: string | null
           invoice_number?: string | null
           is_emergency?: boolean | null
+          is_entreturno?: boolean | null
           is_invoiced?: boolean | null
           is_overbooking?: boolean | null
           modality?: Database["public"]["Enums"]["appointment_modality"]
+          order_number?: string | null
           patient_id: string
           payment_status?: Database["public"]["Enums"]["payment_status"]
           payment_updated_at?: string | null
@@ -174,6 +180,7 @@ export type Database = {
           completed_at?: string | null
           confirmation_sent_at?: string | null
           confirmed_at?: string | null
+          coseguro_amount?: number | null
           created_at?: string | null
           created_by?: string | null
           doctor_id?: string
@@ -187,9 +194,11 @@ export type Database = {
           internal_notes?: string | null
           invoice_number?: string | null
           is_emergency?: boolean | null
+          is_entreturno?: boolean | null
           is_invoiced?: boolean | null
           is_overbooking?: boolean | null
           modality?: Database["public"]["Enums"]["appointment_modality"]
+          order_number?: string | null
           patient_id?: string
           payment_status?: Database["public"]["Enums"]["payment_status"]
           payment_updated_at?: string | null
@@ -597,6 +606,8 @@ export type Database = {
       doctor_clinic_settings: {
         Row: {
           allows_overbooking: boolean | null
+          can_cancel_appointments: boolean | null
+          can_create_appointments: boolean | null
           clinic_id: string
           consultation_fee: number | null
           created_at: string | null
@@ -612,6 +623,8 @@ export type Database = {
         }
         Insert: {
           allows_overbooking?: boolean | null
+          can_cancel_appointments?: boolean | null
+          can_create_appointments?: boolean | null
           clinic_id: string
           consultation_fee?: number | null
           created_at?: string | null
@@ -627,6 +640,8 @@ export type Database = {
         }
         Update: {
           allows_overbooking?: boolean | null
+          can_cancel_appointments?: boolean | null
+          can_create_appointments?: boolean | null
           clinic_id?: string
           consultation_fee?: number | null
           created_at?: string | null
@@ -1246,6 +1261,8 @@ export type Database = {
         | "cancelled_patient"
         | "cancelled_doctor"
         | "rescheduled"
+        | "otorgado"
+        | "cancelled_clinic"
       audit_action:
         | "created"
         | "confirmed"
@@ -1420,6 +1437,8 @@ export const Constants = {
         "cancelled_patient",
         "cancelled_doctor",
         "rescheduled",
+        "otorgado",
+        "cancelled_clinic",
       ],
       audit_action: [
         "created",
