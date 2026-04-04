@@ -366,7 +366,7 @@ Triggered by: clicking empty slot OR clicking "+ New appointment" button.
 
 **Button:** "Book appointment" (or "Create patient & book" for new patient)
 
-**Entreturno flow:** When all slots are occupied, an "Add entreturno" button appears instead of normal slot selection. Sets `is_entreturno = true`.
+**Entreturno flow:** When the secretary clicks on an already-occupied slot, the system asks "Add entreturno?" (only if the doctor has `allows_overbooking = true`). Confirming opens the booking panel with `is_entreturno = true`. The new appointment appears side-by-side with the existing one in the calendar.
 
 ### 7.2 Appointment Detail Mode
 
