@@ -209,6 +209,119 @@ export function useUpdateDoctorSettings(doctorId: string) {
   })
 }
 
+// ─── Create / Link / Lookup / Deactivate Hooks ─────────────────
+
+/** Input for creating a brand-new doctor */
+type CreateDoctorInput = {
+  clinic_id: string
+  email: string
+  password: string
+  first_name: string
+  last_name: string
+  phone?: string
+  specialty?: string
+  license_number?: string
+  slot_duration?: number
+  fee?: number
+}
+
+/** Input for looking up a doctor by email */
+type LookupDoctorInput = {
+  email: string
+  clinic_id: string
+}
+
+/** Result from the lookup endpoint */
+export type LookupDoctorResult = {
+  doctor_id: string
+  display_name: string
+  specialty: string | null
+  already_linked: boolean
+}
+
+/** Input for linking an existing doctor to a clinic */
+type LinkDoctorInput = {
+  doctor_id: string
+  clinic_id: string
+  slot_duration?: number
+  fee?: number
+}
+
+/** Mutation: create a brand-new doctor (auth user + staff + doctors + settings) */
+export function useCreateDoctor() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: CreateDoctorInput) => {
+      const res = await fetch("/api/doctors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to create doctor")
+      return json
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["doctors"] })
+    },
+  })
+}
+
+/** Mutation: look up a doctor by email (returns partial info for privacy) */
+export function useLookupDoctor() {
+  return useMutation({
+    mutationFn: async (input: LookupDoctorInput) => {
+      const res = await fetch("/api/doctors/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Doctor not found")
+      return json as { data: LookupDoctorResult }
+    },
+  })
+}
+
+/** Mutation: link an existing doctor to a clinic */
+export function useLinkDoctor() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: LinkDoctorInput) => {
+      const res = await fetch("/api/doctors/link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to link doctor")
+      return json
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["doctors"] })
+    },
+  })
+}
+
+/** Mutation: soft-deactivate a doctor at a clinic */
+export function useDeactivateDoctor() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ doctorId, clinicId }: { doctorId: string; clinicId: string }) => {
+      const res = await fetch(
+        `/api/doctors/${doctorId}/settings?clinic_id=${clinicId}`,
+        { method: "DELETE" }
+      )
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to deactivate doctor")
+      return json
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["doctors"] })
+    },
+  })
+}
+
 // ─── Schedule Hooks ──────────────────────────────────────────────
 
 /** Fetch all schedule blocks for a doctor at a clinic */

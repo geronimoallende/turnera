@@ -1174,6 +1174,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_doctor_at_clinic: {
+        Args: {
+          p_auth_user_id: string
+          p_clinic_id?: string
+          p_email: string
+          p_fee?: number
+          p_first_name: string
+          p_last_name: string
+          p_license_number?: string
+          p_phone?: string
+          p_slot_duration?: number
+          p_specialty?: string
+        }
+        Returns: Json
+      }
       get_available_slots: {
         Args: { p_clinic_id: string; p_date: string; p_doctor_id: string }
         Returns: {
@@ -1187,6 +1202,15 @@ export type Database = {
       get_user_role: {
         Args: { p_clinic_id: string }
         Returns: Database["public"]["Enums"]["staff_role"]
+      }
+      link_doctor_to_clinic: {
+        Args: {
+          p_clinic_id: string
+          p_doctor_id: string
+          p_fee?: number
+          p_slot_duration?: number
+        }
+        Returns: Json
       }
       match_clinic_documents: {
         Args: {

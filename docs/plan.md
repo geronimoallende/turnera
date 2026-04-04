@@ -314,7 +314,7 @@ RLS: SELECT by clinic admin who invited + the invited doctor. INSERT by clinic a
 - [x] Patient pages (list, detail, new)
 - [x] React Query hooks (`use-patients.ts`)
 
-**Week 3: Doctors** (read side ✅, write side pending)
+**Week 3: Doctors** ✅ DONE
 
 - [x] Doctor list API (GET /api/doctors)
 - [x] Doctor detail API (GET /api/doctors/[id])
@@ -326,16 +326,16 @@ RLS: SELECT by clinic admin who invited + the invited doctor. INSERT by clinic a
 - [x] Doctor pages (list, detail)
 - [x] React Query hooks (`use-doctors.ts`)
 - [x] Server-side role authorization on all doctor mutation endpoints
-- [ ] Migration 018: `create_doctor_at_clinic()` + `link_doctor_to_clinic()` DB functions (atomic, SECURITY DEFINER)
-- [ ] POST /api/doctors — create new doctor (auth + staff + staff_clinics + doctors + doctor_clinic_settings in one transaction)
-- [ ] POST /api/doctors/link — link existing doctor to a clinic (staff_clinics + doctor_clinic_settings)
-- [ ] POST /api/doctors/lookup — search by email, return minimal info (partial name + specialty only)
-- [ ] "Add Doctor" UI — new vs existing flow, admin only
-- [ ] DELETE /api/doctors/[id]/settings — soft-deactivate doctor at a clinic (set is_active=false)
+- [x] Migration 018: `create_doctor_at_clinic()` + `link_doctor_to_clinic()` DB functions (atomic, SECURITY DEFINER)
+- [x] POST /api/doctors — create new doctor (auth + staff + staff_clinics + doctors + doctor_clinic_settings in one transaction)
+- [x] POST /api/doctors/link — link existing doctor to a clinic (staff_clinics + doctor_clinic_settings)
+- [x] POST /api/doctors/lookup — search by email, return minimal info (partial name + specialty only)
+- [x] "Add Doctor" UI — new vs existing flow, admin only
+- [x] DELETE /api/doctors/[id]/settings — soft-deactivate doctor at a clinic (set is_active=false)
 
 **Week 4: Appointments + FullCalendar** ← NEXT
 
-- [ ] Migration 018: entreturno + rendicion + status enum
+- [ ] Migration 019: entreturno + rendicion + status enum
 - [ ] Appointment CRUD API
 - [ ] `get_available_slots` with entreturno
 - [ ] FullCalendar: day (multi-doctor), week, month
@@ -570,7 +570,7 @@ turnera/
 ### Timeline
 
 ```
-Phase 1: Core MVP          Weeks 1-6    (Week 1-2 done, Week 3 partial, Weeks 4-6 remaining)
+Phase 1: Core MVP          Weeks 1-6    (Weeks 1-3 done, Weeks 4-6 remaining)
 Phase 2: Communications    Weeks 7-10
 Phase 3: CRM + Offline     Weeks 11-14
 Phase 4: Production        Weeks 15-17
