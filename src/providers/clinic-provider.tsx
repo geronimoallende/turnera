@@ -53,13 +53,22 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
   // Which clinic is currently selected
   const [activeClinicId, setActiveClinicId] = useState<string | null>(null)
 
-  // When staffClinics loads (or changes), auto-select the first clinic
-  // This runs when the user first logs in
+  // When staffClinics loads (or changes), auto-select the first clinic.
+  // Also recovers if the current activeClinicId is no longer in the list
+  // (e.g., after a token refresh momentarily cleared and reloaded the data).
   useEffect(() => {
-    if (staffClinics.length > 0 && !activeClinicId) {
-      setActiveClinicId(staffClinics[0].clinic_id)
+    if (staffClinics.length > 0) {
+      // Check: is the current activeClinicId still valid?
+      const stillValid = activeClinicId && staffClinics.some(
+        (sc) => sc.clinic_id === activeClinicId
+      )
+      // If no clinic selected yet, or current selection is no longer valid → pick first
+      if (!stillValid) {
+        setActiveClinicId(staffClinics[0].clinic_id)
+      }
     }
-  }, [staffClinics, activeClinicId])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staffClinics])
 
   // Find the current clinic's data from the list
   const activeClinic = staffClinics.find(

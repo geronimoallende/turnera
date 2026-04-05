@@ -196,12 +196,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Skip INITIAL_SESSION — we already have the session from getSession()
         if (event === "INITIAL_SESSION") return
 
-        if (event === "SIGNED_OUT" || !session?.user) {
+        if (event === "SIGNED_OUT") {
+          // Only clear state on explicit sign out — NOT on incomplete sessions.
+          // The old code had `|| !session?.user` which triggered during
+          // TOKEN_REFRESHED events with momentarily incomplete session objects,
+          // causing "No clinic" to flash randomly.
           setUser(null)
           setStaffRecord(null)
           setStaffClinics([])
           setIsLoading(false)
-        } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        } else if (session?.user) {
+          // SIGNED_IN or TOKEN_REFRESHED — update user data.
+          // We check session?.user instead of checking the event name,
+          // because what matters is: do we have a valid user? If yes, use it.
           setUser(session.user)
           await loadStaffData(session.user.id)
         }

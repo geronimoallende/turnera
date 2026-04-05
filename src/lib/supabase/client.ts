@@ -29,7 +29,7 @@ export function createClient() {
             // Supabase wants an array: [{ name: "name1", value: "value1" }, ...]
             return document.cookie.split(';').map(c => {
               const [name, ...rest] = c.trim().split('=')
-              return { name, value: rest.join('=') }
+              return { name, value: decodeURIComponent(rest.join('=')) }
             }).filter(c => c.name)
           },
           setAll(cookiesToSet) {
