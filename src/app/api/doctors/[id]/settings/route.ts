@@ -34,6 +34,8 @@ const updateSettingsSchema = z.object({
   consultation_fee: z.number().min(0).nullable().optional(),
   allows_overbooking: z.boolean().optional(),
   max_overbooking_slots: z.number().int().min(1).nullable().optional(),
+  can_create_appointments: z.boolean().optional(),
+  can_cancel_appointments: z.boolean().optional(),
   is_active: z.boolean().optional(),
   virtual_enabled: z.boolean().optional(),
   virtual_link: z.string().nullable().optional(),

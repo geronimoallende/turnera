@@ -22,6 +22,8 @@ const settingsSchema = z.object({
   consultation_fee: z.number().min(0).nullable().optional(),
   allows_overbooking: z.boolean(),
   max_overbooking_slots: z.number().int().min(1).nullable().optional(),
+  can_create_appointments: z.boolean(),
+  can_cancel_appointments: z.boolean(),
 })
 
 export type ClinicSettingsFormData = z.infer<typeof settingsSchema>
@@ -128,6 +130,43 @@ export function ClinicSettingsForm({
           </div>
         )}
       </div>
+
+      {/* Doctor appointment permissions — only visible to admin */}
+      {canEdit && (
+        <div className="space-y-3 border-t border-[#e5e5e5] pt-4">
+          <h3 className="text-sm font-semibold text-[#1a1a1a]">
+            Appointment Permissions
+          </h3>
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="can_create_appointments"
+              {...register("can_create_appointments")}
+              className="h-4 w-4 rounded border-[#e5e5e5] text-blue-500 focus:ring-blue-500"
+            />
+            <Label
+              htmlFor="can_create_appointments"
+              className="text-sm text-[#1a1a1a]"
+            >
+              Can create appointments
+            </Label>
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="can_cancel_appointments"
+              {...register("can_cancel_appointments")}
+              className="h-4 w-4 rounded border-[#e5e5e5] text-blue-500 focus:ring-blue-500"
+            />
+            <Label
+              htmlFor="can_cancel_appointments"
+              className="text-sm text-[#1a1a1a]"
+            >
+              Can cancel/reschedule appointments
+            </Label>
+          </div>
+        </div>
+      )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
