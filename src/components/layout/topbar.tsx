@@ -25,14 +25,21 @@ export function Topbar() {
   const { staffRecord } = useAuth()
   const { activeRole } = useClinic()
 
-  async function handleLogout() {
+  function handleLogout() {
+    // Safety: navigate to login after 2 seconds no matter what.
+    // If signOut() hangs, we still get out.
+    const timeout = setTimeout(() => {
+      window.location.href = "/login"
+    }, 2000)
+
     const supabase = createClient()
-    await supabase.auth.signOut()
-    // Full page reload — NOT router.push()
-    // router.push() sends the next request before cookies are fully cleared,
-    // so the middleware still sees the old JWT and redirects back to dashboard.
-    // window.location.href forces the browser to clear everything first.
-    window.location.href = "/login"
+    supabase.auth.signOut().then(() => {
+      clearTimeout(timeout)
+      window.location.href = "/login"
+    }).catch(() => {
+      clearTimeout(timeout)
+      window.location.href = "/login"
+    })
   }
 
   return (
