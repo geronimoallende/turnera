@@ -30,7 +30,7 @@ import { withErrorHandler, ApiError } from "@/lib/error-handler"
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/
 
 const querySchema = z.object({
-  clinic_id: z.uuid(),
+  clinic_id: z.string().uuid(),
   date: z.string().regex(dateRegex, "Must be YYYY-MM-DD format"),
 })
 

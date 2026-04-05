@@ -33,11 +33,11 @@ const dateRegex = /^\d{4}-\d{2}-\d{2}$/
 const timeRegex = /^\d{2}:\d{2}$/
 
 const listSchema = z.object({
-  clinic_id: z.uuid(),
+  clinic_id: z.string().uuid(),
 })
 
 const createSchema = z.object({
-  clinic_id: z.uuid(),
+  clinic_id: z.string().uuid(),
   override_date: z.string().regex(dateRegex, "Must be YYYY-MM-DD format"),
   override_type: z.enum(["block", "available"]),
   start_time: z.string().regex(timeRegex, "Must be HH:MM format").nullable().optional(),

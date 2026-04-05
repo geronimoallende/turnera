@@ -28,7 +28,7 @@ import { withErrorHandler, ApiError } from "@/lib/error-handler"
 
 /** Schema for PUT body — all updatable fields on clinic_patients */
 const updateSchema = z.object({
-  clinic_id: z.uuid(),
+  clinic_id: z.string().uuid(),
   first_name: z.string().min(1).optional(),
   last_name: z.string().min(1).optional(),
   dni: z.string().min(1).optional(),

@@ -28,7 +28,7 @@ import { withErrorHandler, ApiError } from "@/lib/error-handler"
 
 const lookupSchema = z.object({
   email: z.string().email("Valid email is required"),
-  clinic_id: z.uuid(),
+  clinic_id: z.string().uuid(),
 })
 
 // ─── Helper: Mask a name for privacy ─────────────────────────────
