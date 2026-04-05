@@ -23,11 +23,15 @@
 
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns"
+import { toast } from "sonner"
 import { useClinic } from "@/providers/clinic-provider"
 import { useDoctors } from "@/lib/hooks/use-doctors"
-import { useAppointments } from "@/lib/hooks/use-appointments"
+import {
+  useAppointments,
+  useRescheduleAppointment,
+} from "@/lib/hooks/use-appointments"
 import type { AppointmentFilters } from "@/lib/hooks/use-appointments"
 import { CalendarHeader } from "@/components/calendar/calendar-header"
 import { CalendarSidebar } from "@/components/calendar/calendar-sidebar"
@@ -174,19 +178,71 @@ export default function CalendarPage() {
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [handleClosePanel])
 
-  // Placeholder for drag-and-drop (Task 8)
+  // ── Drag-and-drop rescheduling ─────────────────────────────
+  // When the secretary drags an appointment block to a new time,
+  // we store the drag info and show a confirmation.
+  // The revert function is stored in a ref (not state) because
+  // calling setRevert would trigger a re-render, but we just need
+  // to keep the function around to call it if the user cancels.
+  const [dragInfo, setDragInfo] = useState<{
+    appointmentId: string
+    newStart: Date
+    newEnd: Date
+  } | null>(null)
+  const revertRef = useRef<(() => void) | null>(null)
+
   const handleEventDrop = useCallback(
     (
-      _appointmentId: string,
-      _newStart: Date,
-      _newEnd: Date,
+      appointmentId: string,
+      newStart: Date,
+      newEnd: Date,
       revert: () => void
     ) => {
-      // Will be implemented in Task 8
-      revert()
+      // Store the drag details + revert function
+      setDragInfo({ appointmentId, newStart, newEnd })
+      revertRef.current = revert
     },
     []
   )
+
+  // Reschedule mutation — must be at top level (React hook rule)
+  // We pass a placeholder ID and override it in the mutate call
+  const rescheduleAppointment = useRescheduleAppointment(
+    dragInfo?.appointmentId ?? ""
+  )
+
+  // Called when user confirms the reschedule
+  function handleConfirmReschedule() {
+    if (!dragInfo || !activeClinicId) return
+
+    rescheduleAppointment.mutate(
+      {
+        clinic_id: activeClinicId,
+        new_date: format(dragInfo.newStart, "yyyy-MM-dd"),
+        new_start_time: format(dragInfo.newStart, "HH:mm"),
+      },
+      {
+        onSuccess: () => {
+          toast.success("Appointment rescheduled")
+          setDragInfo(null)
+          revertRef.current = null
+        },
+        onError: (error) => {
+          toast.error(error.message)
+          revertRef.current?.()
+          setDragInfo(null)
+          revertRef.current = null
+        },
+      }
+    )
+  }
+
+  // Called when user cancels the reschedule
+  function handleCancelReschedule() {
+    revertRef.current?.()
+    setDragInfo(null)
+    revertRef.current = null
+  }
 
   // ── Render ───────────────────────────────────────────────────
 
@@ -269,6 +325,36 @@ export default function CalendarPage() {
           />
         )}
       </div>
+
+      {/* Drag-and-drop confirmation dialog */}
+      {dragInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="w-[360px] rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="mb-2 text-sm font-semibold">
+              Reschedule appointment?
+            </h3>
+            <p className="mb-4 text-xs text-gray-500">
+              Move to {format(dragInfo.newStart, "EEE, MMM d")} at{" "}
+              {format(dragInfo.newStart, "HH:mm")} -{" "}
+              {format(dragInfo.newEnd, "HH:mm")}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleConfirmReschedule}
+                className="flex-1 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
+              >
+                Confirm
+              </button>
+              <button
+                onClick={handleCancelReschedule}
+                className="flex-1 rounded-lg border border-[#e5e5e5] px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

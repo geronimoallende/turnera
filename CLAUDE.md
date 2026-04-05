@@ -146,7 +146,7 @@ After completing ANY implementation task (feature, migration, refactor, fix), yo
 
 1. Link the file using `[filename.ts](path/to/file.ts)` syntax
 2. Show the actual code that was written or changed
-3. Explain every line — what it does, why it's there
+3. Explain every line of CODE individually (skip comments). If a line has multiple concepts, explain each word/symbol separately. Never summarize — go line by line, word by word if needed
 4. Use analogies to connect abstract concepts to real-world things
 5. Ask "Do you understand? Should I go deeper, or continue to the next file?"
 
