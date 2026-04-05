@@ -36,10 +36,22 @@ export default function DashboardLayout({
   const { isLoading } = useAuth()
 
   // Show loading state while checking authentication
+  // But always show a logout button so the user is never trapped
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4">
         <p className="text-gray-500">Loading...</p>
+        <button
+          onClick={async () => {
+            const { createClient } = await import("@/lib/supabase/client")
+            const supabase = createClient()
+            await supabase.auth.signOut()
+            window.location.href = "/login"
+          }}
+          className="text-sm text-red-500 hover:underline"
+        >
+          Sign out
+        </button>
       </div>
     )
   }
