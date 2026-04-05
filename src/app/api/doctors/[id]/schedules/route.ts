@@ -30,11 +30,11 @@ import { withErrorHandler, ApiError } from "@/lib/error-handler"
 const timeRegex = /^\d{2}:\d{2}$/
 
 const listSchema = z.object({
-  clinic_id: z.string().uuid(),
+  clinic_id: z.uuidv4(),
 })
 
 const createSchema = z.object({
-  clinic_id: z.string().uuid(),
+  clinic_id: z.uuidv4(),
   day_of_week: z.number().int().min(0).max(6),
   start_time: z.string().regex(timeRegex, "Must be HH:MM format"),
   end_time: z.string().regex(timeRegex, "Must be HH:MM format"),

@@ -28,7 +28,7 @@ import { logger } from "@/lib/logger"
 // ─── Validation Schema ────────────────────────────────────────────
 
 const updateSettingsSchema = z.object({
-  clinic_id: z.string().uuid(),
+  clinic_id: z.uuidv4(),
   default_slot_duration_minutes: z.number().int().min(5).max(120).optional(),
   max_daily_appointments: z.number().int().min(1).nullable().optional(),
   consultation_fee: z.number().min(0).nullable().optional(),

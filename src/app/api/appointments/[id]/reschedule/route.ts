@@ -20,7 +20,7 @@ import { withErrorHandler, ApiError } from "@/lib/error-handler"
 import { TERMINAL_STATUSES } from "@/lib/constants/appointment-status"
 
 const rescheduleSchema = z.object({
-  clinic_id: z.string().uuid(),
+  clinic_id: z.uuidv4(),
   new_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
   new_start_time: z.string().regex(/^\d{2}:\d{2}$/, "Time must be HH:MM"),
   new_duration_minutes: z.coerce.number().int().min(5).max(120).optional(),

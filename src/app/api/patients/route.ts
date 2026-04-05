@@ -31,7 +31,7 @@ import { withErrorHandler, ApiError } from "@/lib/error-handler"
 
 /** Schema for GET query parameters */
 const listSchema = z.object({
-  clinic_id: z.string().uuid(),
+  clinic_id: z.uuidv4(),
   search: z.string().optional().default(""),
   page: z.coerce.number().int().positive().optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
@@ -43,7 +43,7 @@ const createSchema = z.object({
   last_name: z.string().min(1, "Last name is required"),
   dni: z.string().min(1, "DNI is required"),
   phone: z.string().optional(),
-  clinic_id: z.string().uuid(),
+  clinic_id: z.uuidv4(),
 })
 
 // ─── GET: List patients for a clinic ─────────────────────────────

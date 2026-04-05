@@ -24,8 +24,8 @@ import { createClient } from "@/lib/supabase/server"
 import { withErrorHandler, ApiError } from "@/lib/error-handler"
 
 const queueSchema = z.object({
-  clinic_id: z.string().uuid(),
-  doctor_id: z.string().uuid(),
+  clinic_id: z.uuidv4(),
+  doctor_id: z.uuidv4(),
 })
 
 export const GET = withErrorHandler(async (request: NextRequest) => {

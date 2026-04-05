@@ -32,12 +32,12 @@ import { logger } from "@/lib/logger"
 
 /** Schema for GET query parameters */
 const listSchema = z.object({
-  clinic_id: z.string().uuid(),
+  clinic_id: z.uuidv4(),
 })
 
 /** Schema for POST body — all fields needed to create a new doctor */
 const createSchema = z.object({
-  clinic_id: z.string().uuid(),
+  clinic_id: z.uuidv4(),
   email: z.string().email("Valid email is required"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   first_name: z.string().min(1, "First name is required"),

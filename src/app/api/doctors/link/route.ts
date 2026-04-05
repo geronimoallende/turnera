@@ -24,8 +24,8 @@ import { logger } from "@/lib/logger"
 // ─── Validation Schema ───────────────────────────────────────────
 
 const linkSchema = z.object({
-  doctor_id: z.string().uuid(),
-  clinic_id: z.string().uuid(),
+  doctor_id: z.uuidv4(),
+  clinic_id: z.uuidv4(),
   slot_duration: z.number().int().min(5).max(120).optional().default(30),
   fee: z.number().min(0).optional().default(0),
 })

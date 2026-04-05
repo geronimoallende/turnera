@@ -62,7 +62,7 @@ export const GET = withErrorHandler(async (request: NextRequest, context) => {
 // ─── PUT: Update appointment details ─────────────────────────────
 
 const updateSchema = z.object({
-  clinic_id: z.string().uuid(),
+  clinic_id: z.uuidv4(),
   reason: z.string().nullable().optional(),
   internal_notes: z.string().nullable().optional(),
   duration_minutes: z.coerce.number().int().min(5).max(120).optional(),

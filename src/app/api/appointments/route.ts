@@ -22,24 +22,24 @@ import { withErrorHandler, ApiError } from "@/lib/error-handler"
 
 /** Schema for GET query parameters — what the calendar sends when loading */
 const listSchema = z.object({
-  clinic_id: z.string().uuid(),
+  clinic_id: z.uuidv4(),
   // Single date (day view): "2026-04-04"
   date: z.string().optional(),
   // Date range (week/month view): start_date + end_date
   start_date: z.string().optional(),
   end_date: z.string().optional(),
   // Optional filters
-  doctor_id: z.string().uuid().optional(),
+  doctor_id: z.uuidv4().optional(),
   status: z.string().optional(),
-  patient_id: z.string().uuid().optional(),
+  patient_id: z.uuidv4().optional(),
 })
 
 /** Schema for POST body — the booking form data */
 const createSchema = z.object({
-  clinic_id: z.string().uuid(),
-  doctor_id: z.string().uuid(),
+  clinic_id: z.uuidv4(),
+  doctor_id: z.uuidv4(),
   // patient_id is optional because the secretary might create a new patient inline
-  patient_id: z.string().uuid().optional(),
+  patient_id: z.uuidv4().optional(),
   appointment_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
   start_time: z.string().regex(/^\d{2}:\d{2}$/, "Time must be HH:MM"),
   duration_minutes: z.coerce.number().int().min(5).max(120),

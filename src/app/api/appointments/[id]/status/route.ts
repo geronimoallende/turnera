@@ -19,7 +19,7 @@ import { withErrorHandler, ApiError } from "@/lib/error-handler"
 import { isValidTransition } from "@/lib/constants/appointment-status"
 
 const statusSchema = z.object({
-  clinic_id: z.string().uuid(),
+  clinic_id: z.uuidv4(),
   status: z.string(),
   cancellation_reason: z.string().optional(),
 })
