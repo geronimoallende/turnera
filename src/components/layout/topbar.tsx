@@ -13,7 +13,6 @@
  * 3. Middleware sees no token → redirects to /login
  */
 
-import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useAuth } from "@/providers/auth-provider"
 import { useClinic } from "@/providers/clinic-provider"
@@ -23,15 +22,17 @@ import { Badge } from "@/components/ui/badge"
 import { LogOut } from "lucide-react"
 
 export function Topbar() {
-  const router = useRouter()
   const { staffRecord } = useAuth()
   const { activeRole } = useClinic()
 
   async function handleLogout() {
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push("/login")
-    router.refresh()
+    // Full page reload — NOT router.push()
+    // router.push() sends the next request before cookies are fully cleared,
+    // so the middleware still sees the old JWT and redirects back to dashboard.
+    // window.location.href forces the browser to clear everything first.
+    window.location.href = "/login"
   }
 
   return (
