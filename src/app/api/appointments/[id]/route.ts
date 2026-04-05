@@ -23,7 +23,7 @@ const APPOINTMENT_DETAIL_SELECT = `
   source, modality, checked_in_at, started_at, completed_at,
   cancelled_at, cancellation_reason, actual_duration_minutes,
   payment_status, created_at, updated_at,
-  doctors!inner(id, first_name, last_name, specialty),
+  doctors!inner(id, specialty, staff!inner(first_name, last_name)),
   clinic_patients!inner(id, first_name, last_name, dni, phone, email,
     insurance_provider, insurance_plan, no_show_count, date_of_birth)
 `

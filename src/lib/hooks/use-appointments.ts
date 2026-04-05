@@ -38,12 +38,14 @@ export type AppointmentListItem = {
   checked_in_at: string | null      // when patient arrived (ISO timestamp)
   started_at: string | null         // when consultation started
   completed_at: string | null       // when consultation finished
-  // Joined data from the doctors table
+  // Joined data from the doctors table (name comes from staff via staff_id)
   doctors: {
     id: string
-    first_name: string
-    last_name: string
-    specialty: string
+    specialty: string | null
+    staff: {
+      first_name: string
+      last_name: string
+    }
   }
   // Joined data from the clinic_patients table
   clinic_patients: {

@@ -159,10 +159,10 @@ export function AppointmentDetail({
       <div className="text-xs text-gray-500">
         <div className="mb-1">
           <span className="font-semibold text-gray-900">
-            Dr. {doctor.last_name}
+            Dr. {doctor.staff?.last_name || "Unknown"}
           </span>
           {" — "}
-          {doctor.specialty}
+          {doctor.specialty || "General"}
         </div>
         <div>
           {format(new Date(appointment.appointment_date + "T12:00:00"), "EEE, MMM d, yyyy")}

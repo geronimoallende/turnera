@@ -70,7 +70,7 @@ const APPOINTMENT_SELECT = `
   id, appointment_date, start_time, end_time, duration_minutes,
   status, reason, is_overbooking, is_entreturno, internal_notes,
   checked_in_at, started_at, completed_at,
-  doctors!inner(id, first_name, last_name, specialty),
+  doctors!inner(id, specialty, staff!inner(first_name, last_name)),
   clinic_patients!inner(id, first_name, last_name, dni, phone,
     insurance_provider, insurance_plan, no_show_count)
 `
