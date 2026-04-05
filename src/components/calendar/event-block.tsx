@@ -41,8 +41,14 @@ type EventBlockProps = {
 }
 
 export function EventBlock({ event, compact = false }: EventBlockProps) {
-  const { patientName, status, reason, isOverbooking, duration } =
-    event.extendedProps
+  // Safely read extendedProps — FullCalendar may pass them differently
+  // depending on how the event was created
+  const props = event.extendedProps || {}
+  const patientName = props.patientName || "Unknown"
+  const status = props.status || "confirmed"
+  const reason = props.reason || null
+  const isOverbooking = props.isOverbooking || false
+  const duration = props.duration || 30
 
   // Get the border color for this status from our constants
   const borderColor = APPOINTMENT_STATUS_COLORS[status] || "#3b82f6"

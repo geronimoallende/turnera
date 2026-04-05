@@ -67,10 +67,11 @@ export function WeekView({
   )
 
   // Compact renderer — shows only time + last name (less space per block)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const renderEventContent = useCallback((info: EventContentArg) => {
     return (
       <EventBlock
-        event={info.event as unknown as EventBlockEventType}
+        event={info.event as any}
         compact={true}
       />
     )

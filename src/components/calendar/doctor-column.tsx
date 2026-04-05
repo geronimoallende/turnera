@@ -131,8 +131,10 @@ export function DoctorColumn({
   )
 
   // Custom renderer for each event block — replaces FullCalendar's default
+  // info.event has: start, end, extendedProps — we pass it directly
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const renderEventContent = useCallback((info: EventContentArg) => {
-    return <EventBlock event={info.event as unknown as EventBlockProps["event"]} />
+    return <EventBlock event={info.event as any} />
   }, [])
 
   return (
