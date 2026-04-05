@@ -57,9 +57,13 @@ export function Topbar() {
         )}
 
         {/* Logout button */}
-        <Button variant="ghost" size="icon" onClick={handleLogout}>
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-red-500 hover:bg-red-50"
+        >
           <LogOut className="h-4 w-4" />
-        </Button>
+          Sign out
+        </button>
       </div>
     </header>
   )
