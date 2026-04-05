@@ -33,7 +33,7 @@ import type { PatientListItem } from "@/lib/hooks/use-patients"
 
 type BookingFormProps = {
   clinicId: string
-  // Pre-filled from the clicked slot
+  // Pre-filled from the clicked slot (null if "+ New appointment" clicked)
   slotInfo: {
     start: Date
     end: Date
@@ -41,6 +41,8 @@ type BookingFormProps = {
   } | null
   // Doctor info for display
   doctorName?: string
+  // All doctors at this clinic (for manual doctor selection when no slot clicked)
+  doctors?: Array<{ id: string; full_name: string }>
   // Called when the booking is complete or the user cancels
   onClose: () => void
 }
@@ -49,6 +51,7 @@ export function BookingForm({
   clinicId,
   slotInfo,
   doctorName,
+  doctors = [],
   onClose,
 }: BookingFormProps) {
   // ── State ────────────────────────────────────────────────────
@@ -74,6 +77,14 @@ export function BookingForm({
     slotInfo ? format(slotInfo.start, "HH:mm") : "09:00"
   )
   const [notes, setNotes] = useState("")
+
+  // Manual entry fields (used when no slot was clicked)
+  const [manualDate, setManualDate] = useState(
+    slotInfo ? format(slotInfo.start, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd")
+  )
+  const [manualDoctorId, setManualDoctorId] = useState(
+    slotInfo?.doctorId || doctors[0]?.id || ""
+  )
 
   // The mutation hook — handles the API call
   const createAppointment = useCreateAppointment()
@@ -118,12 +129,19 @@ export function BookingForm({
 
   // ── Submit the booking ───────────────────────────────────────
   async function handleSubmit() {
-    if (!slotInfo) return
+    // Use slot info if available, otherwise use manual entry fields
+    const doctorId = slotInfo?.doctorId || manualDoctorId
+    const appointmentDate = slotInfo ? format(slotInfo.start, "yyyy-MM-dd") : manualDate
+
+    if (!doctorId) {
+      toast.error("Select a doctor")
+      return
+    }
 
     const appointmentData: Record<string, unknown> = {
       clinic_id: clinicId,
-      doctor_id: slotInfo.doctorId,
-      appointment_date: format(slotInfo.start, "yyyy-MM-dd"),
+      doctor_id: doctorId,
+      appointment_date: appointmentDate,
       start_time: startTime,
       duration_minutes: durationMinutes,
       reason: consultationType,
@@ -154,7 +172,7 @@ export function BookingForm({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Pre-filled slot info */}
+      {/* Pre-filled slot info (when clicking an empty slot) */}
       {slotInfo && (
         <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-600">
           <span className="font-semibold">{doctorName || "Doctor"}</span>
@@ -164,6 +182,36 @@ export function BookingForm({
           <span>
             {format(slotInfo.start, "HH:mm")} - {format(slotInfo.end, "HH:mm")}
           </span>
+        </div>
+      )}
+
+      {/* Manual entry (when clicking "+ New appointment" without a slot) */}
+      {!slotInfo && (
+        <div className="flex flex-col gap-3 rounded-lg bg-gray-50 p-3">
+          <div>
+            <Label className="text-xs font-medium text-gray-600">Doctor</Label>
+            <select
+              value={manualDoctorId}
+              onChange={(e) => setManualDoctorId(e.target.value)}
+              className="mt-1 w-full rounded-md border border-[#e5e5e5] bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Select doctor...</option>
+              {doctors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label className="text-xs font-medium text-gray-600">Date</Label>
+            <Input
+              type="date"
+              value={manualDate}
+              onChange={(e) => setManualDate(e.target.value)}
+              className="mt-1 border-[#e5e5e5] shadow-none"
+            />
+          </div>
         </div>
       )}
 

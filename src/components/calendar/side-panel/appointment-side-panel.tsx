@@ -20,8 +20,8 @@ type AppointmentSidePanelProps = {
   slotInfo: { start: Date; end: Date; doctorId: string } | null
   clinicId: string | null
   role: string | null
-  // Doctor info for the booking form header
   doctorName?: string
+  doctors?: Array<{ id: string; full_name: string }>
   onClose: () => void
 }
 
@@ -32,6 +32,7 @@ export function AppointmentSidePanel({
   clinicId,
   role,
   doctorName,
+  doctors,
   onClose,
 }: AppointmentSidePanelProps) {
   if (!clinicId) return null
@@ -58,6 +59,7 @@ export function AppointmentSidePanel({
             clinicId={clinicId}
             slotInfo={slotInfo}
             doctorName={doctorName}
+            doctors={doctors}
             onClose={onClose}
           />
         )}

@@ -24,6 +24,7 @@
 "use client"
 
 import { useState, useCallback, useEffect, useRef } from "react"
+import dynamic from "next/dynamic"
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns"
 import { toast } from "sonner"
 import { useQueryClient } from "@tanstack/react-query"
@@ -37,11 +38,31 @@ import {
 import type { AppointmentFilters } from "@/lib/hooks/use-appointments"
 import { CalendarHeader } from "@/components/calendar/calendar-header"
 import { CalendarSidebar } from "@/components/calendar/calendar-sidebar"
-import { MultiDoctorGrid } from "@/components/calendar/multi-doctor-grid"
-import { WeekView } from "@/components/calendar/week-view"
-import { MonthView } from "@/components/calendar/month-view"
 import { AppointmentSidePanel } from "@/components/calendar/side-panel/appointment-side-panel"
 import { DOCTOR_COLORS } from "@/lib/constants/appointment-status"
+
+// Lazy load heavy FullCalendar components — they're ~500KB and slow to compile.
+// ssr: false because FullCalendar uses browser APIs (DOM, window).
+// Lazy load heavy FullCalendar components — they're ~500KB and slow to compile.
+// ssr: false because FullCalendar uses browser APIs (DOM, window).
+// .then(m => m.ComponentName) extracts the named export as default.
+const CalendarLoading = () => (
+  <div className="flex flex-1 items-center justify-center text-sm text-gray-400">
+    Loading calendar...
+  </div>
+)
+const MultiDoctorGrid = dynamic(
+  () => import("@/components/calendar/multi-doctor-grid").then((m) => ({ default: m.MultiDoctorGrid })),
+  { ssr: false, loading: CalendarLoading }
+)
+const WeekView = dynamic(
+  () => import("@/components/calendar/week-view").then((m) => ({ default: m.WeekView })),
+  { ssr: false, loading: CalendarLoading }
+)
+const MonthView = dynamic(
+  () => import("@/components/calendar/month-view").then((m) => ({ default: m.MonthView })),
+  { ssr: false, loading: CalendarLoading }
+)
 
 // ─── Page Component ──────────────────────────────────────────────
 
@@ -179,6 +200,16 @@ export default function CalendarPage() {
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [handleClosePanel])
+
+  // ── Resize calendar when side panel opens/closes ─────────────
+  // FullCalendar doesn't automatically resize when its container changes.
+  // Dispatching a window resize event tells it to recalculate its width.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new Event("resize"))
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [panelMode])
 
   // ── Supabase Realtime subscription ───────────────────────────
   // Listen for any changes to the appointments table at this clinic.
@@ -334,6 +365,7 @@ export default function CalendarPage() {
             <WeekView
               date={currentDate}
               appointments={appointments}
+              doctorId={weekViewDoctorId}
               onEventClick={handleEventClick}
               onSlotSelect={handleSlotSelect}
             />
@@ -363,6 +395,7 @@ export default function CalendarPage() {
                 ? doctors.find((d) => d.id === slotInfo.doctorId)?.full_name || undefined
                 : undefined
             }
+            doctors={doctors}
             onClose={handleClosePanel}
           />
         )}

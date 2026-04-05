@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button"
 import {
   useAppointment,
   useUpdateAppointmentStatus,
+  useRescheduleAppointment,
 } from "@/lib/hooks/use-appointments"
 import {
   APPOINTMENT_STATUS_COLORS,
@@ -50,12 +51,18 @@ export function AppointmentDetail({
   )
   const appointment = appointmentData?.data
 
-  // Mutation hook for changing status
+  // Mutation hooks
   const updateStatus = useUpdateAppointmentStatus(appointmentId)
+  const rescheduleAppointment = useRescheduleAppointment(appointmentId)
 
   // State for the cancel confirmation dialog
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [cancelReason, setCancelReason] = useState("")
+
+  // State for the reschedule form
+  const [showRescheduleForm, setShowRescheduleForm] = useState(false)
+  const [rescheduleDate, setRescheduleDate] = useState("")
+  const [rescheduleTime, setRescheduleTime] = useState("")
 
   // ── Loading state ────────────────────────────────────────────
   if (isLoading) {
@@ -239,10 +246,7 @@ export function AppointmentDetail({
             variant="outline"
             className="flex-1 border-[#e5e5e5] text-xs shadow-none"
             size="sm"
-            onClick={() => {
-              toast.info("Drag the appointment block to reschedule")
-              onClose()
-            }}
+            onClick={() => setShowRescheduleForm(true)}
           >
             Reschedule
           </Button>
@@ -286,6 +290,66 @@ export function AppointmentDetail({
               size="sm"
             >
               Keep appointment
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Reschedule form ─────────────────────────────────────── */}
+      {showRescheduleForm && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+          <div className="mb-2 text-xs font-semibold text-blue-600">
+            Reschedule to:
+          </div>
+          <div className="mb-2 flex gap-2">
+            <input
+              type="date"
+              value={rescheduleDate}
+              onChange={(e) => setRescheduleDate(e.target.value)}
+              className="flex-1 rounded-md border border-blue-200 bg-white p-2 text-xs"
+            />
+            <input
+              type="time"
+              value={rescheduleTime}
+              onChange={(e) => setRescheduleTime(e.target.value)}
+              className="w-24 rounded-md border border-blue-200 bg-white p-2 text-xs"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => {
+                if (!rescheduleDate || !rescheduleTime) {
+                  toast.error("Select date and time")
+                  return
+                }
+                rescheduleAppointment.mutate(
+                  {
+                    clinic_id: clinicId,
+                    new_date: rescheduleDate,
+                    new_start_time: rescheduleTime,
+                  },
+                  {
+                    onSuccess: () => {
+                      toast.success("Appointment rescheduled")
+                      onClose()
+                    },
+                    onError: (err) => toast.error(err.message),
+                  }
+                )
+              }}
+              disabled={rescheduleAppointment.isPending}
+              className="flex-1 bg-blue-500 text-xs shadow-none hover:bg-blue-600"
+              size="sm"
+            >
+              {rescheduleAppointment.isPending ? "Rescheduling..." : "Confirm"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowRescheduleForm(false)}
+              className="flex-1 border-[#e5e5e5] text-xs shadow-none"
+              size="sm"
+            >
+              Cancel
             </Button>
           </div>
         </div>

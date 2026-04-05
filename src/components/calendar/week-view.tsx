@@ -22,6 +22,7 @@ import type { AppointmentListItem } from "@/lib/hooks/use-appointments"
 type WeekViewProps = {
   date: Date
   appointments: AppointmentListItem[]
+  doctorId: string
   onEventClick: (appointmentId: string) => void
   onSlotSelect: (info: { start: Date; end: Date; doctorId: string }) => void
 }
@@ -46,6 +47,7 @@ function appointmentsToEvents(appointments: AppointmentListItem[]) {
 export function WeekView({
   date,
   appointments,
+  doctorId,
   onEventClick,
   onSlotSelect,
 }: WeekViewProps) {
@@ -58,9 +60,6 @@ export function WeekView({
 
   const handleSelect = useCallback(
     (info: DateSelectArg) => {
-      // In week view, we pass the doctorId from the first appointment's doctor
-      // since week view shows one doctor at a time
-      const doctorId = appointments[0]?.doctors.id || ""
       onSlotSelect({ start: info.start, end: info.end, doctorId })
     },
     [onSlotSelect, appointments]
