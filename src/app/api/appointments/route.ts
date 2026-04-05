@@ -103,7 +103,9 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
 
   // Optional filters — the calendar sidebar can filter by doctor, status, etc.
   if (doctor_id) query = query.eq("doctor_id", doctor_id)
-  if (status) query = query.eq("status", status)
+  // Cast status to the enum type — Supabase's generated types are strict
+  // about enum columns, but the user sends a plain string
+  if (status) query = query.eq("status", status as "confirmed")
   if (patient_id) query = query.eq("patient_id", patient_id)
 
   // Order by date first, then by time within each date

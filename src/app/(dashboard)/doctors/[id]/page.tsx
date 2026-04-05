@@ -192,6 +192,8 @@ export default function DoctorDetailPage({
               consultation_fee: doctor.clinic_settings.consultation_fee,
               allows_overbooking: doctor.clinic_settings.allows_overbooking ?? false,
               max_overbooking_slots: doctor.clinic_settings.max_overbooking_slots,
+              can_create_appointments: doctor.clinic_settings.can_create_appointments ?? false,
+              can_cancel_appointments: doctor.clinic_settings.can_cancel_appointments ?? false,
             }}
             canEdit={canEditSettings}
             onSubmit={handleSettingsSubmit}

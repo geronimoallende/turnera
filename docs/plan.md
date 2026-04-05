@@ -333,19 +333,23 @@ RLS: SELECT by clinic admin who invited + the invited doctor. INSERT by clinic a
 - [x] "Add Doctor" UI — new vs existing flow, admin only
 - [x] DELETE /api/doctors/[id]/settings — soft-deactivate doctor at a clinic (set is_active=false)
 
-**Week 4: Appointments + FullCalendar** ← NEXT
+**Week 4: Appointments + FullCalendar** ✅ DONE
 
-- [ ] Migration 019: entreturno + rendicion + status enum
-- [ ] Appointment CRUD API
-- [ ] `get_available_slots` with entreturno
-- [ ] FullCalendar: day (multi-doctor), week, month
-- [ ] Quick booking side panel (< 3s target)
-- [ ] Status workflow (otorgado → ... → completed)
-- [ ] DNI search + inline new-patient in booking
-- [ ] Entreturno squeeze-in button
-- [ ] Duplicate booking prevention
-- [ ] Realtime on appointments
-- [ ] Playwright E2E booking flow
+- [x] Migration 019: entreturno + rendicion + status enum + doctor permissions
+- [x] Appointment CRUD API (list, detail, create with inline patient, update, status change, reschedule)
+- [x] Doctor queue API (waiting room grouped by status)
+- [x] React Query hooks (useAppointments, useCreateAppointment, useUpdateAppointmentStatus, useRescheduleAppointment, useDoctorQueue)
+- [x] FullCalendar: day (multi-doctor columns), week (single doctor), month (aggregate badges)
+- [x] Quick booking side panel with patient search autocomplete + inline new patient creation
+- [x] Status workflow (confirmed → arrived → in_progress → completed, with cancel/no_show branches)
+- [x] Appointment detail panel with contextual action buttons (role-based)
+- [x] Drag-and-drop rescheduling with confirmation dialog
+- [x] Doctor's waiting room view (in progress / waiting / upcoming queue)
+- [x] Supabase Realtime subscription for live calendar updates
+- [x] Doctor appointment permission toggles (can_create/cancel_appointments, admin-controlled)
+- [x] Status constants (colors, labels, valid transitions)
+- [ ] Playwright E2E booking flow (deferred to Week 6)
+- [ ] Duplicate booking prevention UI warning (handled by DB trigger, UI warning deferred)
 
 **Week 5: Dashboard + Reports + Rendicion**
 

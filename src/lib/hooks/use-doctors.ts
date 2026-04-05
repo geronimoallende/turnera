@@ -46,6 +46,8 @@ export type DoctorDetail = {
     consultation_fee: number | null
     allows_overbooking: boolean | null
     max_overbooking_slots: number | null
+    can_create_appointments: boolean | null
+    can_cancel_appointments: boolean | null
     is_active: boolean | null
   } | null
 }

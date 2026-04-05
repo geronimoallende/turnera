@@ -107,15 +107,13 @@ export function WeekView({
 }
 
 type EventBlockEventType = {
-  event: {
-    start: Date | null
-    end: Date | null
-    extendedProps: {
-      patientName: string
-      status: string
-      reason: string | null
-      isOverbooking: boolean
-      duration: number
-    }
+  start: Date | null
+  end: Date | null
+  extendedProps: {
+    patientName: string
+    status: string
+    reason: string | null
+    isOverbooking: boolean
+    duration: number
   }
 }
