@@ -26,20 +26,18 @@ export function Topbar() {
   const { activeRole } = useClinic()
 
   function handleLogout() {
-    // Safety: navigate to login after 2 seconds no matter what.
-    // If signOut() hangs, we still get out.
+    // Call the server-side signout endpoint.
+    // The server can clear httpOnly cookies — JavaScript can't.
+    // Safety timeout: if the API hangs, navigate anyway after 3s.
     const timeout = setTimeout(() => {
       window.location.href = "/login"
-    }, 2000)
+    }, 3000)
 
-    const supabase = createClient()
-    supabase.auth.signOut().then(() => {
-      clearTimeout(timeout)
-      window.location.href = "/login"
-    }).catch(() => {
-      clearTimeout(timeout)
-      window.location.href = "/login"
-    })
+    fetch("/api/auth/signout", { method: "POST" })
+      .finally(() => {
+        clearTimeout(timeout)
+        window.location.href = "/login"
+      })
   }
 
   return (

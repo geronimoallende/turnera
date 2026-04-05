@@ -42,11 +42,9 @@ export default function DashboardLayout({
       <div className="flex min-h-screen flex-col items-center justify-center gap-4">
         <p className="text-gray-500">Loading...</p>
         <button
-          onClick={async () => {
-            const { createClient } = await import("@/lib/supabase/client")
-            const supabase = createClient()
-            await supabase.auth.signOut()
-            window.location.href = "/login"
+          onClick={() => {
+            fetch("/api/auth/signout", { method: "POST" })
+              .finally(() => { window.location.href = "/login" })
           }}
           className="text-sm text-red-500 hover:underline"
         >
