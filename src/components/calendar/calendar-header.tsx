@@ -38,7 +38,7 @@ type CalendarHeaderProps = {
   // Week view shows a dropdown to pick which doctor
   selectedDoctorId?: string
   onDoctorChange?: (doctorId: string) => void
-  doctors?: Array<{ id: string; first_name: string; last_name: string }>
+  doctors?: Array<{ id: string; full_name: string }>
   role: string | null
 }
 
@@ -131,7 +131,7 @@ export function CalendarHeader({
           >
             {doctors.map((d) => (
               <option key={d.id} value={d.id}>
-                Dr. {d.last_name}
+                {d.full_name}
               </option>
             ))}
           </select>

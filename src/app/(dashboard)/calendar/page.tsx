@@ -34,6 +34,7 @@ import { CalendarSidebar } from "@/components/calendar/calendar-sidebar"
 import { MultiDoctorGrid } from "@/components/calendar/multi-doctor-grid"
 import { WeekView } from "@/components/calendar/week-view"
 import { MonthView } from "@/components/calendar/month-view"
+import { AppointmentSidePanel } from "@/components/calendar/side-panel/appointment-side-panel"
 import { DOCTOR_COLORS } from "@/lib/constants/appointment-status"
 
 // ─── Page Component ──────────────────────────────────────────────
@@ -251,29 +252,21 @@ export default function CalendarPage() {
           )}
         </div>
 
-        {/* Right: Side panel (Task 7 — placeholder for now) */}
+        {/* Right: Side panel */}
         {panelMode !== "closed" && (
-          <div className="w-[360px] shrink-0 border-l border-[#e5e5e5] bg-white p-4 shadow-[-2px_0_8px_rgba(0,0,0,0.05)]">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">
-                {panelMode === "new" ? "New appointment" : "Appointment detail"}
-              </h3>
-              <button
-                onClick={handleClosePanel}
-                className="text-lg text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
-            </div>
-            <p className="mt-4 text-xs text-gray-400">
-              {panelMode === "new" && slotInfo
-                ? `Booking for ${format(slotInfo.start, "HH:mm")} - ${format(slotInfo.end, "HH:mm")}`
-                : panelMode === "detail" && selectedAppointmentId
-                  ? `Appointment: ${selectedAppointmentId.slice(0, 8)}...`
-                  : "Select a time slot or appointment"}
-            </p>
-            {/* Full implementation in Task 7 */}
-          </div>
+          <AppointmentSidePanel
+            mode={panelMode as "new" | "detail"}
+            appointmentId={selectedAppointmentId}
+            slotInfo={slotInfo}
+            clinicId={activeClinicId}
+            role={activeRole}
+            doctorName={
+              slotInfo
+                ? doctors.find((d) => d.id === slotInfo.doctorId)?.full_name || undefined
+                : undefined
+            }
+            onClose={handleClosePanel}
+          />
         )}
       </div>
     </div>

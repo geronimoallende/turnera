@@ -17,8 +17,7 @@ import { APPOINTMENT_STATUS_COLORS } from "@/lib/constants/appointment-status"
 
 type Doctor = {
   id: string
-  first_name: string
-  last_name: string
+  full_name: string
   color: string
 }
 
@@ -98,7 +97,7 @@ export function CalendarSidebar({
                 style={{ backgroundColor: doctor.color }}
               />
               <span className="truncate">
-                Dr. {doctor.last_name}
+                {doctor.full_name}
               </span>
             </label>
           ))}

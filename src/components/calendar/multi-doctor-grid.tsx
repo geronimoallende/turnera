@@ -27,9 +27,8 @@ import type { AppointmentListItem } from "@/lib/hooks/use-appointments"
 
 type Doctor = {
   id: string
-  first_name: string
-  last_name: string
-  specialty: string
+  full_name: string
+  specialty: string | null
   color: string
 }
 
@@ -94,8 +93,8 @@ export function MultiDoctorGrid({
         <DoctorColumn
           key={doctor.id}
           doctorId={doctor.id}
-          doctorName={`Dr. ${doctor.last_name}`}
-          specialty={doctor.specialty}
+          doctorName={doctor.full_name}
+          specialty={doctor.specialty || ""}
           color={doctor.color}
           date={date}
           appointments={appointmentsByDoctor.get(doctor.id) || []}

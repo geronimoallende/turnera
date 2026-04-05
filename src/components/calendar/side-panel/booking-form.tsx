@@ -1,0 +1,291 @@
+/**
+ * BookingForm — The form for creating a new appointment.
+ *
+ * Appears when the secretary clicks an empty time slot in the calendar.
+ * Pre-fills the doctor, date, and time from the clicked slot.
+ *
+ * Flow:
+ *   1. Secretary types DNI → PatientSearch shows matches
+ *   2. Secretary selects a patient (or creates new via InlinePatientForm)
+ *   3. Secretary picks consultation type and duration (pre-filled)
+ *   4. Secretary clicks "Book appointment"
+ *   5. useCreateAppointment sends POST /api/appointments
+ *   6. On success → calendar refetches → new block appears → panel closes
+ */
+
+"use client"
+
+import { useState } from "react"
+import { format } from "date-fns"
+import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { useCreateAppointment } from "@/lib/hooks/use-appointments"
+import { PatientSearch } from "./patient-search"
+import { InlinePatientForm } from "./inline-patient-form"
+import {
+  CONSULTATION_TYPES,
+  DURATION_OPTIONS,
+} from "@/lib/constants/appointment-status"
+import type { PatientListItem } from "@/lib/hooks/use-patients"
+
+type BookingFormProps = {
+  clinicId: string
+  // Pre-filled from the clicked slot
+  slotInfo: {
+    start: Date
+    end: Date
+    doctorId: string
+  } | null
+  // Doctor info for display
+  doctorName?: string
+  // Called when the booking is complete or the user cancels
+  onClose: () => void
+}
+
+export function BookingForm({
+  clinicId,
+  slotInfo,
+  doctorName,
+  onClose,
+}: BookingFormProps) {
+  // ── State ────────────────────────────────────────────────────
+
+  // Which patient is selected (or null if none yet)
+  const [selectedPatient, setSelectedPatient] = useState<PatientListItem | null>(
+    null
+  )
+  // Is the inline "new patient" form showing?
+  const [showNewPatientForm, setShowNewPatientForm] = useState(false)
+  // New patient data (if creating inline)
+  const [newPatientData, setNewPatientData] = useState<{
+    dni: string
+    first_name: string
+    last_name: string
+    phone?: string
+  } | null>(null)
+
+  // Form fields
+  const [consultationType, setConsultationType] = useState("consultation")
+  const [durationMinutes, setDurationMinutes] = useState(30)
+  const [startTime, setStartTime] = useState(
+    slotInfo ? format(slotInfo.start, "HH:mm") : "09:00"
+  )
+  const [notes, setNotes] = useState("")
+
+  // The mutation hook — handles the API call
+  const createAppointment = useCreateAppointment()
+
+  // ── Derived values ───────────────────────────────────────────
+
+  // Do we have a patient (either selected or created inline)?
+  const hasPatient = selectedPatient !== null || newPatientData !== null
+  // Display name for the selected/created patient
+  const patientDisplayName = selectedPatient
+    ? `${selectedPatient.first_name} ${selectedPatient.last_name}`
+    : newPatientData
+      ? `${newPatientData.first_name} ${newPatientData.last_name}`
+      : null
+
+  // ── Handlers ─────────────────────────────────────────────────
+
+  // Secretary selected an existing patient from search
+  function handlePatientSelect(patient: PatientListItem) {
+    setSelectedPatient(patient)
+    setNewPatientData(null)
+    setShowNewPatientForm(false)
+  }
+
+  // Secretary filled the inline new patient form
+  function handleNewPatientSubmit(data: {
+    dni: string
+    first_name: string
+    last_name: string
+    phone?: string
+  }) {
+    setNewPatientData(data)
+    setSelectedPatient(null)
+    setShowNewPatientForm(false)
+  }
+
+  // Clear patient selection (go back to search)
+  function clearPatient() {
+    setSelectedPatient(null)
+    setNewPatientData(null)
+  }
+
+  // ── Submit the booking ───────────────────────────────────────
+  async function handleSubmit() {
+    if (!slotInfo) return
+
+    const appointmentData: Record<string, unknown> = {
+      clinic_id: clinicId,
+      doctor_id: slotInfo.doctorId,
+      appointment_date: format(slotInfo.start, "yyyy-MM-dd"),
+      start_time: startTime,
+      duration_minutes: durationMinutes,
+      reason: consultationType,
+      internal_notes: notes || undefined,
+    }
+
+    // Either use existing patient ID or create new patient inline
+    if (selectedPatient) {
+      appointmentData.patient_id = selectedPatient.id
+    } else if (newPatientData) {
+      appointmentData.new_patient = newPatientData
+    }
+
+    // .mutate() calls the API. We use the callback form to handle success/error.
+    createAppointment.mutate(appointmentData as Parameters<typeof createAppointment.mutate>[0], {
+      onSuccess: () => {
+        // Sonner toast = a small notification that appears at the bottom
+        toast.success("Appointment booked")
+        onClose()
+      },
+      onError: (error) => {
+        toast.error(error.message)
+      },
+    })
+  }
+
+  // ── Render ───────────────────────────────────────────────────
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Pre-filled slot info */}
+      {slotInfo && (
+        <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-600">
+          <span className="font-semibold">{doctorName || "Doctor"}</span>
+          <span className="text-blue-300">·</span>
+          <span>{format(slotInfo.start, "EEE, MMM d")}</span>
+          <span className="text-blue-300">·</span>
+          <span>
+            {format(slotInfo.start, "HH:mm")} - {format(slotInfo.end, "HH:mm")}
+          </span>
+        </div>
+      )}
+
+      {/* Patient search or selected patient card */}
+      {!hasPatient && !showNewPatientForm && (
+        <PatientSearch
+          clinicId={clinicId}
+          onSelect={handlePatientSelect}
+          onNewPatient={() => setShowNewPatientForm(true)}
+        />
+      )}
+
+      {/* Inline new patient form */}
+      {showNewPatientForm && (
+        <InlinePatientForm
+          onSubmit={handleNewPatientSubmit}
+          onCancel={() => setShowNewPatientForm(false)}
+        />
+      )}
+
+      {/* Selected patient card — shows after selection */}
+      {hasPatient && (
+        <div>
+          <Label className="text-xs font-medium text-gray-600">Patient</Label>
+          <div className="mt-1 flex items-center justify-between rounded-lg border border-[#e5e5e5] bg-gray-50 px-3 py-2.5">
+            <div>
+              <div className="text-sm font-semibold">{patientDisplayName}</div>
+              {selectedPatient && (
+                <div className="text-[11px] text-gray-400">
+                  DNI {selectedPatient.dni ?? "—"}
+                  {selectedPatient.insurance_provider &&
+                    ` · ${selectedPatient.insurance_provider}`}
+                </div>
+              )}
+              {newPatientData && (
+                <div className="text-[11px] text-gray-400">
+                  DNI {newPatientData.dni} · New patient
+                </div>
+              )}
+            </div>
+            {/* X button to deselect and go back to search */}
+            <button
+              onClick={clearPatient}
+              className="text-sm text-gray-400 hover:text-gray-600"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Consultation type */}
+      <div>
+        <Label className="text-xs font-medium text-gray-600">
+          Consultation type
+        </Label>
+        <select
+          value={consultationType}
+          onChange={(e) => setConsultationType(e.target.value)}
+          className="mt-1 w-full rounded-md border border-[#e5e5e5] bg-white px-3 py-2 text-sm"
+        >
+          {CONSULTATION_TYPES.map((type) => (
+            <option key={type.value} value={type.value}>
+              {type.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Duration + Time — side by side */}
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <Label className="text-xs font-medium text-gray-600">Duration</Label>
+          <select
+            value={durationMinutes}
+            onChange={(e) => setDurationMinutes(Number(e.target.value))}
+            className="mt-1 w-full rounded-md border border-[#e5e5e5] bg-white px-3 py-2 text-sm"
+          >
+            {DURATION_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex-1">
+          <Label className="text-xs font-medium text-gray-600">Time</Label>
+          <Input
+            type="time"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+            className="mt-1 border-[#e5e5e5] shadow-none"
+          />
+        </div>
+      </div>
+
+      {/* Notes */}
+      <div>
+        <Label className="text-xs font-medium text-gray-600">
+          Notes (optional)
+        </Label>
+        <Textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Internal notes..."
+          className="mt-1 resize-none border-[#e5e5e5] shadow-none"
+          rows={2}
+        />
+      </div>
+
+      {/* Book button */}
+      <Button
+        onClick={handleSubmit}
+        disabled={!hasPatient || createAppointment.isPending}
+        className="w-full bg-blue-500 shadow-none hover:bg-blue-600 disabled:opacity-50"
+      >
+        {createAppointment.isPending
+          ? "Booking..."
+          : newPatientData
+            ? "Create patient & book"
+            : "Book appointment"}
+      </Button>
+    </div>
+  )
+}
