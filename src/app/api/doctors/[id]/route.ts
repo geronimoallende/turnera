@@ -82,7 +82,9 @@ export const GET = withErrorHandler(async (request: NextRequest, context) => {
       allows_overbooking,
       max_overbooking_slots,
       virtual_enabled,
-      virtual_link
+      virtual_link,
+      can_create_appointments,
+      can_cancel_appointments
     `
     )
     .eq("doctor_id", id)

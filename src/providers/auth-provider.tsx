@@ -79,44 +79,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [staffClinics, setStaffClinics] = useState<StaffClinic[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // useEffect runs code ONCE when the component first appears on screen.
-  // We use it to check: "Is someone already logged in?"
+  // useEffect sets up a SINGLE auth listener that handles everything.
+  // Instead of calling getUser() manually + listening for changes (which causes
+  // two simultaneous calls and a lock conflict), we use onAuthStateChange as
+  // the ONLY source of truth.
   useEffect(() => {
     const supabase = createClient()
+    let cancelled = false
 
-    async function loadUser() {
+    // Fetches staff record + clinics for a given auth user
+    async function loadStaffData(authUserId: string) {
       try {
-        // Step 1: Ask Supabase Auth "who is logged in?"
-        // getUser() checks the JWT token stored in cookies
-        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
-
-        if (authError || !authUser) {
-          // No one is logged in, or auth check failed
-          // (finally block will set isLoading = false)
-          return
-        }
-
-        setUser(authUser)
-
-        // Step 2: Fetch the staff record for this auth user
+        // Fetch the staff record for this auth user
         // .eq() means "where auth_user_id equals this value"
         // .single() means "I expect exactly one result"
         const { data: staff, error: staffError } = await supabase
           .from("staff")
           .select("id, auth_user_id, first_name, last_name, email")
-          .eq("auth_user_id", authUser.id)
+          .eq("auth_user_id", authUserId)
           .single()
 
+        if (cancelled) return
+
         if (staffError || !staff) {
-          // Staff record not found — user exists in Auth but not in staff table
-          // (finally block will set isLoading = false)
           logger.error({ error: staffError?.message }, "Failed to load staff record")
           return
         }
 
         setStaffRecord(staff)
 
-        // Step 3: Fetch which clinics this staff member belongs to
+        // Fetch which clinics this staff member belongs to
         // The select joins staff_clinics with clinics to get clinic names
         // clinics(id, name, slug) means: "also fetch the related clinic data"
         const { data: clinics, error: clinicsError } = await supabase
@@ -124,43 +116,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .select("clinic_id, role, clinics(id, name, slug)")
           .eq("staff_id", staff.id)
 
+        if (cancelled) return
+
         if (clinicsError) {
           logger.error({ error: clinicsError.message }, "Failed to load staff clinics")
         } else if (clinics) {
-          // TypeScript needs us to cast because Supabase returns a generic type
           setStaffClinics(clinics as unknown as StaffClinic[])
         }
       } catch (err) {
-        // Catch any unexpected error (network failure, timeout, etc.)
-        // so setIsLoading(false) ALWAYS runs and the UI never gets stuck
-        logger.error({ error: err instanceof Error ? err.message : String(err) }, "Auth loading failed")
+        if (!cancelled) {
+          logger.error({ error: err instanceof Error ? err.message : String(err) }, "Auth loading failed")
+        }
       } finally {
-        // finally {} runs no matter what — whether the try succeeded or
-        // threw an error. This guarantees isLoading becomes false.
-        setIsLoading(false)
+        if (!cancelled) {
+          setIsLoading(false)
+        }
       }
     }
 
-    loadUser()
-
-    // Step 4: Listen for auth changes (login, logout, token refresh)
-    // This way, if the user logs out in another tab, this tab updates too
+    // onAuthStateChange fires IMMEDIATELY with INITIAL_SESSION (the current
+    // session if one exists), then again on any future login/logout.
+    // This replaces the old pattern of getUser() + onAuthStateChange,
+    // which caused two simultaneous calls fighting over the auth lock.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event) => {
-        if (event === "SIGNED_OUT") {
+      async (event, session) => {
+        if (cancelled) return
+
+        if (event === "SIGNED_OUT" || !session?.user) {
           setUser(null)
           setStaffRecord(null)
           setStaffClinics([])
-        } else if (event === "SIGNED_IN") {
-          // Reload everything when someone signs in
-          loadUser()
+          setIsLoading(false)
+        } else {
+          // INITIAL_SESSION, SIGNED_IN, or TOKEN_REFRESHED
+          setUser(session.user)
+          await loadStaffData(session.user.id)
         }
       }
     )
 
-    // Cleanup: when the component is removed, stop listening
+    // Safety timeout: if auth loading takes more than 8 seconds,
+    // force isLoading to false so the UI doesn't get stuck.
+    // This can happen when Supabase's auth lock conflicts in dev mode
+    // (React Strict Mode runs effects twice, causing lock contention).
+    const safetyTimeout = setTimeout(() => {
+      if (!cancelled) {
+        setIsLoading(false)
+      }
+    }, 8000)
+
+    // Cleanup: when the component is removed (or Strict Mode re-runs),
+    // cancel pending work and stop listening
     return () => {
+      cancelled = true
       subscription.unsubscribe()
+      clearTimeout(safetyTimeout)
     }
   }, []) // Empty array = run only once on mount
 
