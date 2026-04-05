@@ -26,6 +26,8 @@
 import { useState, useCallback, useEffect, useRef } from "react"
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns"
 import { toast } from "sonner"
+import { useQueryClient } from "@tanstack/react-query"
+import { createClient } from "@/lib/supabase/client"
 import { useClinic } from "@/providers/clinic-provider"
 import { useDoctors } from "@/lib/hooks/use-doctors"
 import {
@@ -177,6 +179,46 @@ export default function CalendarPage() {
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [handleClosePanel])
+
+  // ── Supabase Realtime subscription ───────────────────────────
+  // Listen for any changes to the appointments table at this clinic.
+  // When another user creates, updates, or deletes an appointment,
+  // the database pushes a notification to all connected browsers.
+  // We respond by invalidating the React Query cache, which triggers
+  // a refetch → the calendar updates automatically.
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    if (!activeClinicId) return
+
+    const supabase = createClient()
+
+    // Subscribe to all changes (INSERT, UPDATE, DELETE) on appointments
+    // filtered to only this clinic's data
+    const channel = supabase
+      .channel(`appointments-${activeClinicId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "appointments",
+          filter: `clinic_id=eq.${activeClinicId}`,
+        },
+        () => {
+          // Something changed — invalidate all appointment-related caches
+          queryClient.invalidateQueries({ queryKey: ["appointments"] })
+          queryClient.invalidateQueries({ queryKey: ["doctor-queue"] })
+          queryClient.invalidateQueries({ queryKey: ["available-slots"] })
+        }
+      )
+      .subscribe()
+
+    // Cleanup: unsubscribe when the component unmounts or clinic changes
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [activeClinicId, queryClient])
 
   // ── Drag-and-drop rescheduling ─────────────────────────────
   // When the secretary drags an appointment block to a new time,
