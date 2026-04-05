@@ -7,12 +7,16 @@ import type { Database } from '@/lib/types/database'
  * - Automatically includes the user's JWT from cookies
  * - RLS policies filter data based on who's logged in
  *
- * The cookies configuration is required so that signOut() can properly
- * clear auth cookies. Without it, signOut() hangs forever because
- * the library doesn't know how to read/write browser cookies.
+ * DO NOT add a custom cookies handler here.
+ * createBrowserClient handles cookies internally (localStorage + memory).
+ * A custom handler using document.cookie breaks auth because:
+ *   1. httpOnly cookies are invisible to document.cookie
+ *   2. The garbled token causes RLS queries to fail ("Failed to load staff record")
+ *
+ * Logout is handled by the server-side endpoint POST /api/auth/signout,
+ * which CAN access httpOnly cookies.
  *
  * This is a singleton — the same client is reused across the entire app.
- * Creating multiple clients would cause auth state conflicts.
  */
 let client: ReturnType<typeof createBrowserClient<Database>> | null = null
 
@@ -20,33 +24,7 @@ export function createClient() {
   if (!client) {
     client = createBrowserClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            // Parse document.cookie into the format Supabase expects
-            // document.cookie is a single string: "name1=value1; name2=value2"
-            // Supabase wants an array: [{ name: "name1", value: "value1" }, ...]
-            return document.cookie.split(';').map(c => {
-              const [name, ...rest] = c.trim().split('=')
-              return { name, value: decodeURIComponent(rest.join('=')) }
-            }).filter(c => c.name)
-          },
-          setAll(cookiesToSet) {
-            // Write each cookie to document.cookie
-            // On signOut(), Supabase calls this to clear the auth cookies
-            // by setting them with maxAge=0 (expired)
-            cookiesToSet.forEach(({ name, value, options }) => {
-              let cookie = `${name}=${encodeURIComponent(value)}`
-              if (options?.path) cookie += `; path=${options.path}`
-              if (options?.maxAge !== undefined) cookie += `; max-age=${options.maxAge}`
-              if (options?.domain) cookie += `; domain=${options.domain}`
-              if (options?.sameSite) cookie += `; samesite=${options.sameSite}`
-              document.cookie = cookie
-            })
-          },
-        },
-      }
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
   }
   return client

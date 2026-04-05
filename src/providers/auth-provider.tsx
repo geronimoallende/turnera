@@ -215,13 +215,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     )
 
-    // Safety timeout: if auth loading takes more than 5 seconds,
+    // Safety timeout: if auth loading takes more than 8 seconds,
     // force isLoading to false so the UI never gets stuck.
     const safetyTimeout = setTimeout(() => {
       if (isActive()) {
+        logger.warn("Auth loading timed out after 8 seconds")
         setIsLoading(false)
       }
-    }, 5000)
+    }, 8000)
 
     // ── Cleanup ───────────────────────────────────────────────────
     // Runs when the component unmounts (or Strict Mode re-runs the effect).
