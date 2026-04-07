@@ -24,7 +24,7 @@
 
 "use client"
 
-import { useForm } from "react-hook-form"
+import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Input } from "@/components/ui/input"
@@ -40,6 +40,8 @@ export const createPatientSchema = z.object({
   last_name: z.string().min(1, "Last name is required"),
   dni: z.string().min(1, "DNI is required"),
   phone: z.string().optional(),
+  whatsapp_same: z.boolean().optional(),
+  whatsapp_phone: z.string().optional(),
   email: z.email("Invalid email").optional().or(z.literal("")),
   date_of_birth: z.string().optional(),
   gender: z.string().optional(),
@@ -90,10 +92,15 @@ export function CreatePatientForm({
   const {
     register, // Connects inputs to the form
     handleSubmit, // Wraps onSubmit with validation
+    control, // Needed by useWatch to observe field values
     formState: { errors }, // Contains field-level error messages
   } = useForm<CreatePatientFormData>({
     resolver: zodResolver(createPatientSchema),
+    defaultValues: { whatsapp_same: true },
   })
+
+  // Watch the "same number" checkbox — when checked, hide the WhatsApp field
+  const whatsappSame = useWatch({ control, name: "whatsapp_same" })
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -183,7 +190,7 @@ export function CreatePatientForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="phone" className="text-sm text-[#1a1a1a]">
-              Phone / WhatsApp
+              Phone
             </Label>
             <Input
               id="phone"
@@ -208,6 +215,34 @@ export function CreatePatientForm({
             )}
           </div>
         </div>
+
+        {/* WhatsApp — same as phone by default */}
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="whatsapp_same"
+            {...register("whatsapp_same")}
+            className="h-4 w-4 rounded border-[#e5e5e5] text-blue-500 focus:ring-blue-500"
+          />
+          <Label htmlFor="whatsapp_same" className="text-sm text-[#1a1a1a]">
+            WhatsApp is the same as phone
+          </Label>
+        </div>
+
+        {/* Only show separate WhatsApp field when checkbox is unchecked */}
+        {!whatsappSame && (
+          <div className="space-y-1.5">
+            <Label htmlFor="whatsapp_phone" className="text-sm text-[#1a1a1a]">
+              WhatsApp number
+            </Label>
+            <Input
+              id="whatsapp_phone"
+              {...register("whatsapp_phone")}
+              placeholder="+54 9 351..."
+              className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
+            />
+          </div>
+        )}
       </div>
 
       {/* ── Section 3: Insurance ── */}
