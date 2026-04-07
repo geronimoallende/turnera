@@ -43,15 +43,6 @@ const createSchema = z.object({
   last_name: z.string().min(1, "Last name is required"),
   dni: z.string().min(1, "DNI is required"),
   phone: z.string().optional(),
-  whatsapp_same: z.boolean().optional(),
-  whatsapp_phone: z.string().optional(),
-  email: z.email().optional().or(z.literal("")),
-  date_of_birth: z.string().optional(),
-  gender: z.string().optional(),
-  insurance_provider: z.string().optional(),
-  insurance_plan: z.string().optional(),
-  insurance_member_number: z.string().optional(),
-  notes: z.string().optional(),
   clinic_id: z.uuidv4(),
 })
 
@@ -146,12 +137,7 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
   // 1. Parse and validate the request body
   //    .parse() throws ZodError if invalid → caught by withErrorHandler → 400
   const body = await request.json()
-  const {
-    first_name, last_name, dni, phone, email,
-    date_of_birth, gender, insurance_provider, insurance_plan,
-    insurance_member_number, notes, clinic_id,
-    whatsapp_same, whatsapp_phone,
-  } = createSchema.parse(body)
+  const { first_name, last_name, dni, phone, clinic_id } = createSchema.parse(body)
 
   const supabase = await createClient()
 
@@ -183,16 +169,6 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       last_name,
       dni,
       phone: phone ?? null,
-      // If "same as phone" is checked (or not specified), copy phone to whatsapp
-      // Otherwise use the separate whatsapp_phone field
-      whatsapp_phone: (whatsapp_same !== false ? phone : whatsapp_phone) ?? null,
-      email: email || null,
-      date_of_birth: date_of_birth || null,
-      gender: gender || null,
-      insurance_provider: insurance_provider || null,
-      insurance_plan: insurance_plan || null,
-      insurance_member_number: insurance_member_number || null,
-      notes: notes || null,
       clinic_id,
     })
     .select()
