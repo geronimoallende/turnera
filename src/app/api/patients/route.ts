@@ -24,6 +24,23 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { withErrorHandler, ApiError } from "@/lib/error-handler"
 
+/**
+ * Normalize a search term to match the `clinic_patients.search_text` generated column.
+ *
+ * The DB column is computed as: lower(unaccent(first_name || last_name || dni)).
+ * We have to apply the same transformations on the query side so "garcia" matches "García".
+ *
+ * - trim()           : strip surrounding whitespace
+ * - toLowerCase()    : case-insensitive
+ * - normalize('NFD') : decompose accented chars into base + combining mark
+ * - regex strip      : remove the combining marks (unicode range U+0300-U+036F)
+ *
+ * Result: "  GÁRCÍA " -> "garcia"
+ */
+function normalizeSearch(s: string): string {
+  return s.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+}
+
 // ─── Validation Schemas ──────────────────────────────────────────
 // zod schemas define what shape the incoming data must have.
 // If the data doesn't match, .parse() throws a ZodError which
@@ -43,6 +60,10 @@ const createSchema = z.object({
   last_name: z.string().min(1, "Last name is required"),
   dni: z.string().min(1, "DNI is required"),
   phone: z.string().optional(),
+  whatsapp_enabled: z.boolean().optional().default(true),
+  insurance_provider: z.string().optional(),
+  insurance_plan: z.string().optional(),
+  insurance_member_number: z.string().optional(),
   clinic_id: z.uuidv4(),
 })
 
@@ -74,7 +95,7 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
       dni,
       phone,
       email,
-      whatsapp_phone,
+      whatsapp_enabled,
       is_active,
       blacklist_status,
       no_show_count,
@@ -88,16 +109,17 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     .eq("clinic_id", clinic_id)
     .eq("is_active", true)
 
-  // 5. Apply search filter if provided
-  //    ilike = case-insensitive LIKE (SQL pattern matching)
-  //    In PostgREST's .or() filter, we use * instead of % as the wildcard
-  //    because % conflicts with URL encoding (%20 = space, etc.)
+  // 5. Apply search filter if provided.
+  //    `search_text` is a STORED generated column on clinic_patients:
+  //      lower(unaccent(first_name || ' ' || last_name || ' ' || dni))
+  //    We normalize the query term the same way (lower + NFD-strip diacritics)
+  //    so "garcia" / "GARCIA" / "García" all collapse to the same needle.
+  //    A GIN trigram index on search_text makes leading-wildcard ilike fast.
   if (search) {
-    // Search by first name, last name, or DNI
-    // or() combines multiple conditions with OR logic
-    query = query.or(
-      `first_name.ilike.*${search}*,last_name.ilike.*${search}*,dni.ilike.*${search}*`
-    )
+    const normalized = normalizeSearch(search)
+    if (normalized.length > 0) {
+      query = query.ilike("search_text", `*${normalized}*`)
+    }
   }
 
   // 6. Apply pagination
@@ -137,7 +159,7 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
   // 1. Parse and validate the request body
   //    .parse() throws ZodError if invalid → caught by withErrorHandler → 400
   const body = await request.json()
-  const { first_name, last_name, dni, phone, clinic_id } = createSchema.parse(body)
+  const { first_name, last_name, dni, phone, whatsapp_enabled, insurance_provider, insurance_plan, insurance_member_number, clinic_id } = createSchema.parse(body)
 
   const supabase = await createClient()
 
@@ -169,6 +191,10 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       last_name,
       dni,
       phone: phone ?? null,
+      whatsapp_enabled,
+      insurance_provider: insurance_provider ?? null,
+      insurance_plan: insurance_plan ?? null,
+      insurance_member_number: insurance_member_number ?? null,
       clinic_id,
     })
     .select()

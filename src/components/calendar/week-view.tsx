@@ -11,18 +11,21 @@
 
 "use client"
 
-import { useCallback } from "react"
+import { useCallback, useMemo } from "react"
 import FullCalendar from "@fullcalendar/react"
 import timeGridPlugin from "@fullcalendar/timegrid"
 import interactionPlugin from "@fullcalendar/interaction"
 import type { EventContentArg, EventClickArg, DateSelectArg } from "@fullcalendar/core"
 import { EventBlock } from "./event-block"
 import type { AppointmentListItem } from "@/lib/hooks/use-appointments"
+import type { EffectiveSchedule } from "@/lib/schedule-utils"
 
 type WeekViewProps = {
   date: Date
   appointments: AppointmentListItem[]
   doctorId: string
+  /** Schedule per date string "YYYY-MM-DD" → EffectiveSchedule */
+  weekSchedules?: Record<string, EffectiveSchedule>
   onEventClick: (appointmentId: string) => void
   onSlotSelect: (info: { start: Date; end: Date; doctorId: string }) => void
 }
@@ -48,10 +51,31 @@ export function WeekView({
   date,
   appointments,
   doctorId,
+  weekSchedules = {},
   onEventClick,
   onSlotSelect,
 }: WeekViewProps) {
-  const events = appointmentsToEvents(appointments)
+  // Filter out cancelled/rescheduled — same as custom day grid
+  const HIDDEN = new Set(["cancelled_patient", "cancelled_doctor", "rescheduled"])
+  const visibleAppointments = appointments.filter((a) => !HIDDEN.has(a.status))
+  const events = appointmentsToEvents(visibleAppointments)
+
+  // Convert per-date schedules → FullCalendar businessHours
+  const businessHoursConfig = useMemo(() => {
+    const entries = Object.entries(weekSchedules)
+    if (entries.length === 0) return undefined
+    const hours: Array<{ daysOfWeek: number[]; startTime: string; endTime: string }> = []
+    for (const [dateStr, schedule] of entries) {
+      if (schedule.blocks.length === 0) continue
+      const dow = new Date(dateStr + "T12:00:00").getUTCDay()
+      for (const block of schedule.blocks) {
+        hours.push({ daysOfWeek: [dow], startTime: block.start_time, endTime: block.end_time })
+      }
+    }
+    return hours.length > 0 ? hours : undefined
+  }, [weekSchedules])
+
+  const hasSchedule = !!businessHoursConfig
 
   const handleEventClick = useCallback(
     (info: EventClickArg) => onEventClick(info.event.id),
@@ -87,8 +111,11 @@ export function WeekView({
         firstDay={1}
         slotDuration="00:15:00"
         slotLabelInterval="00:30:00"
-        slotMinTime="07:00:00"
-        slotMaxTime="21:00:00"
+        slotMinTime="06:00:00"
+        slotMaxTime="22:00:00"
+        scrollTime="07:30:00"
+        businessHours={businessHoursConfig}
+        {...(hasSchedule ? { selectConstraint: "businessHours" as const } : {})}
         selectable={true}
         selectMirror={true}
         selectOverlap={false}

@@ -17,16 +17,19 @@
 
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
+import { MessageCircle } from "lucide-react"
 import type { PatientListItem } from "@/lib/hooks/use-patients"
 
 type PatientTableProps = {
   patients: PatientListItem[]
   isLoading: boolean
+  isFetching: boolean
 }
 
-export function PatientTable({ patients, isLoading }: PatientTableProps) {
+export function PatientTable({ patients, isLoading, isFetching }: PatientTableProps) {
   const router = useRouter()
 
+  // First-ever load: no cached data yet.
   if (isLoading) {
     return (
       <div className="rounded-md border border-[#e5e5e5] bg-white p-8 text-center text-sm text-gray-500">
@@ -35,10 +38,12 @@ export function PatientTable({ patients, isLoading }: PatientTableProps) {
     )
   }
 
+  // Subsequent search: show "Searching…" while the refetch is in flight to
+  // avoid flashing "No patients found." before the response arrives.
   if (patients.length === 0) {
     return (
       <div className="rounded-md border border-[#e5e5e5] bg-white p-8 text-center text-sm text-gray-500">
-        No patients found.
+        {isFetching ? "Searching..." : "No patients found."}
       </div>
     )
   }
@@ -77,9 +82,14 @@ export function PatientTable({ patients, isLoading }: PatientTableProps) {
                 {cp.dni ?? "—"}
               </td>
 
-              {/* Phone */}
+              {/* Phone + WhatsApp indicator */}
               <td className="px-4 py-2.5 text-gray-500">
-                {cp.phone ?? "—"}
+                <span className="inline-flex items-center gap-1.5">
+                  {cp.phone ?? "—"}
+                  {cp.phone && cp.whatsapp_enabled && (
+                    <MessageCircle className="h-3.5 w-3.5 text-green-500" />
+                  )}
+                </span>
               </td>
 
               {/* Insurance */}

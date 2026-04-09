@@ -17,13 +17,14 @@
 
 "use client"
 
-import { useRef, useCallback } from "react"
+import { useMemo, useCallback, useEffect } from "react"
 import FullCalendar from "@fullcalendar/react"
 import timeGridPlugin from "@fullcalendar/timegrid"
 import interactionPlugin from "@fullcalendar/interaction"
 import type { EventContentArg, EventClickArg, EventDropArg, DateSelectArg } from "@fullcalendar/core"
 import { EventBlock } from "./event-block"
 import type { AppointmentListItem } from "@/lib/hooks/use-appointments"
+import type { TimeBlock } from "@/lib/schedule-utils"
 
 type DoctorColumnProps = {
   doctorId: string
@@ -35,6 +36,10 @@ type DoctorColumnProps = {
   appointments: AppointmentListItem[]
   // Is this the first (leftmost) column? Only it shows time labels
   isFirst: boolean
+  // ── Schedule data (all optional — safe defaults prevent crashes) ──
+  scheduleBlocks?: TimeBlock[]
+  isBlocked?: boolean
+  blockReason?: string | null
   // Callbacks to parent
   onSlotSelect: (info: { start: Date; end: Date; doctorId: string }) => void
   onEventClick: (appointmentId: string) => void
@@ -90,6 +95,9 @@ export function DoctorColumn({
   date,
   appointments,
   isFirst,
+  scheduleBlocks = [],
+  isBlocked = false,
+  blockReason = null,
   onSlotSelect,
   onEventClick,
   onEventDrop,
@@ -97,6 +105,31 @@ export function DoctorColumn({
 }: DoctorColumnProps) {
   // Convert our appointment data to FullCalendar events
   const events = appointmentsToEvents(appointments)
+
+  // Convert schedule blocks → FullCalendar businessHours format
+  // When no blocks: undefined → no businessHours → column stays all-white (current behavior)
+  const dayOfWeek = date.getDay()
+  const businessHoursConfig = useMemo(() => {
+    if (scheduleBlocks.length === 0) return undefined
+    return scheduleBlocks.map((block) => ({
+      daysOfWeek: [dayOfWeek],
+      startTime: block.start_time,
+      endTime: block.end_time,
+    }))
+  }, [scheduleBlocks, dayOfWeek])
+
+  const hasSchedule = scheduleBlocks.length > 0
+
+  // ── Sync date when prop changes ────────────────────────────
+  // initialDate only works on first render. When the user picks
+  // a new date from the sidebar, we need to tell FullCalendar
+  // to navigate to it via the API.
+  useEffect(() => {
+    const api = calendarRef.current?.getApi()
+    if (api) {
+      api.gotoDate(date)
+    }
+  }, [date, calendarRef])
 
   // ── Event handlers ──────────────────────────────────────────
 
@@ -138,7 +171,7 @@ export function DoctorColumn({
   }, [])
 
   return (
-    <div className="flex min-w-[200px] flex-1 flex-col">
+    <div className={`doctor-col flex min-w-[200px] flex-1 flex-col ${isBlocked ? "doctor-column-blocked" : ""}`}>
       {/* Doctor name header — colored to match this column */}
       <div
         className="border-b-2 border-l border-[#e5e5e5] px-2 py-2 text-center"
@@ -150,6 +183,18 @@ export function DoctorColumn({
         <div className="text-[10px] text-gray-400">{specialty}</div>
       </div>
 
+      {/* Banner for blocked or no-schedule state */}
+      {isBlocked && (
+        <div className="doctor-column-banner doctor-column-banner--blocked">
+          {blockReason || "Day off"}
+        </div>
+      )}
+      {!isBlocked && !hasSchedule && (
+        <div className="doctor-column-banner doctor-column-banner--no-schedule">
+          No schedule configured
+        </div>
+      )}
+
       {/* The FullCalendar instance */}
       <div className="flex-1 overflow-hidden border-l border-[#e5e5e5]">
         <FullCalendar
@@ -157,39 +202,33 @@ export function DoctorColumn({
           plugins={[timeGridPlugin, interactionPlugin]}
           initialView="timeGridDay"
           initialDate={date}
-          // ── Header: hidden. Navigation is handled by CalendarHeader ──
           headerToolbar={false}
-          // ── Time grid settings ──
-          // slotDuration: each row in the grid = 15 minutes
-          // slotLabelInterval: but we only show a time label every 30 min
-          //   08:00  ←── label
-          //          ←── 08:15 (no label, just a line)
-          //   08:30  ←── label
-          //          ←── 08:45 (no label)
           slotDuration="00:15:00"
           slotLabelInterval="00:30:00"
           slotMinTime="07:00:00"
           slotMaxTime="21:00:00"
-          // Only the first column shows time labels (08:00, 08:30, etc.)
-          // The others hide them to save space
+          scrollTime="07:30:00"
           slotLabelContent={isFirst ? undefined : () => null}
-          // ── Selection (clicking empty slots) ──
-          selectable={true}
+          // ── Schedule: business hours ──
+          businessHours={businessHoursConfig}
+          // Only constrain selection when schedule exists
+          {...(hasSchedule ? { selectConstraint: "businessHours" as const } : {})}
+          // ── Selection ──
+          selectable={!isBlocked}
           selectMirror={true}
           selectOverlap={false}
           select={handleSelect}
           // ── Drag and drop ──
-          editable={true}
+          // No eventConstraint — entreturnos must be draggable anywhere
+          editable={!isBlocked}
           snapDuration="00:15:00"
           eventDrop={handleEventDrop}
-          // ── Click on events ──
           eventClick={handleEventClick}
           // ── Visual ──
           nowIndicator={true}
           allDaySlot={false}
-          dayHeaderFormat={{ weekday: undefined, month: undefined, day: undefined }}
+          dayHeaders={false}
           height="100%"
-          // ── Data ──
           events={events}
           eventContent={renderEventContent}
         />

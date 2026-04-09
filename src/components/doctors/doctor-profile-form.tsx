@@ -1,22 +1,26 @@
 /**
  * DoctorProfileForm — editable profile section on the doctor detail page.
  *
- * Fields: Full Name (first + last), Email (read-only), Specialty, License Number.
+ * Fields: Full Name (first + last), Email (read-only), Phone, WhatsApp checkbox,
+ * Specialty, License Number.
  * Save button only visible when canEdit is true (admin or the doctor themselves).
  */
 
 "use client"
 
-import { useForm } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 
 const profileSchema = z.object({
   first_name: z.string().min(1, "First name is required"),
   last_name: z.string().min(1, "Last name is required"),
+  phone: z.string().nullable().optional(),
+  whatsapp_enabled: z.boolean(),
   specialty: z.string().nullable().optional(),
   license_number: z.string().nullable().optional(),
 })
@@ -43,6 +47,7 @@ export function DoctorProfileForm({
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
   } = useForm<DoctorProfileFormData>({
     resolver: zodResolver(profileSchema),
@@ -88,6 +93,15 @@ export function DoctorProfileForm({
         </div>
 
         <div className="space-y-1.5">
+          <Label className="text-sm text-[#1a1a1a]">Phone</Label>
+          <Input
+            {...register("phone")}
+            disabled={!canEdit}
+            className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500 disabled:bg-gray-50"
+          />
+        </div>
+
+        <div className="space-y-1.5">
           <Label className="text-sm text-[#1a1a1a]">Specialty</Label>
           <Input
             {...register("specialty")}
@@ -106,6 +120,28 @@ export function DoctorProfileForm({
           />
         </div>
       </div>
+
+      {/* WhatsApp checkbox — below the grid */}
+      <Controller
+        name="whatsapp_enabled"
+        control={control}
+        render={({ field }) => (
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="doctor_whatsapp_enabled"
+              checked={field.value}
+              onCheckedChange={field.onChange}
+              disabled={!canEdit}
+            />
+            <Label
+              htmlFor="doctor_whatsapp_enabled"
+              className="text-sm text-gray-600 cursor-pointer"
+            >
+              This phone has WhatsApp
+            </Label>
+          </div>
+        )}
+      />
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 

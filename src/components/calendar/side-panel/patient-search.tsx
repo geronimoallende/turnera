@@ -62,7 +62,7 @@ export function PatientSearch({
   // ── Fetch patients matching the search ──────────────────────
   // This only runs when debouncedSearch has at least 2 characters.
   // The usePatients hook calls GET /api/patients?search=...
-  const { data } = usePatients(
+  const { data, isFetching } = usePatients(
     debouncedSearch.length >= 2 ? clinicId : null,
     debouncedSearch,
     1,   // page
@@ -136,12 +136,14 @@ export function PatientSearch({
             </button>
           ))}
 
-          {/* "No results" message */}
-          {patients.length === 0 && (
+          {/* Loading / empty state */}
+          {isFetching ? (
+            <div className="px-3 py-2 text-xs text-gray-400">Searching…</div>
+          ) : patients.length === 0 ? (
             <div className="px-3 py-2 text-xs text-gray-400">
               No patients found for &quot;{debouncedSearch}&quot;
             </div>
-          )}
+          ) : null}
 
           {/* "+ New patient" option — always at the bottom */}
           <button

@@ -128,3 +128,9 @@
     @apply font-sans;
   }
 }
+
+/* ─── FullCalendar overrides (week/month views only) ─────────── */
+
+:root {
+  --fc-non-business-color: rgba(215, 215, 215, 0.3);
+}

@@ -345,9 +345,10 @@ export type Database = {
           patient_type: string | null
           phone: string | null
           priority: string | null
+          search_text: string | null
           tags: string[] | null
           updated_at: string | null
-          whatsapp_phone: string | null
+          whatsapp_enabled: boolean
         }
         Insert: {
           allergies?: string | null
@@ -373,9 +374,10 @@ export type Database = {
           patient_type?: string | null
           phone?: string | null
           priority?: string | null
+          search_text?: string | null
           tags?: string[] | null
           updated_at?: string | null
-          whatsapp_phone?: string | null
+          whatsapp_enabled?: boolean
         }
         Update: {
           allergies?: string | null
@@ -401,9 +403,10 @@ export type Database = {
           patient_type?: string | null
           phone?: string | null
           priority?: string | null
+          search_text?: string | null
           tags?: string[] | null
           updated_at?: string | null
-          whatsapp_phone?: string | null
+          whatsapp_enabled?: boolean
         }
         Relationships: [
           {
@@ -1034,6 +1037,7 @@ export type Database = {
           last_name: string
           phone: string | null
           updated_at: string | null
+          whatsapp_enabled: boolean
         }
         Insert: {
           auth_user_id: string
@@ -1045,6 +1049,7 @@ export type Database = {
           last_name: string
           phone?: string | null
           updated_at?: string | null
+          whatsapp_enabled?: boolean
         }
         Update: {
           auth_user_id?: string
@@ -1056,6 +1061,7 @@ export type Database = {
           last_name?: string
           phone?: string | null
           updated_at?: string | null
+          whatsapp_enabled?: boolean
         }
         Relationships: []
       }
@@ -1218,6 +1224,7 @@ export type Database = {
         Args: { p_clinic_id: string }
         Returns: Database["public"]["Enums"]["staff_role"]
       }
+      immutable_unaccent: { Args: { "": string }; Returns: string }
       link_doctor_to_clinic: {
         Args: {
           p_clinic_id: string
@@ -1241,6 +1248,9 @@ export type Database = {
           similarity: number
         }[]
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
+      unaccent: { Args: { "": string }; Returns: string }
     }
     Enums: {
       appointment_modality: "in_person" | "virtual"

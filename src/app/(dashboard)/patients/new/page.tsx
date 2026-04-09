@@ -32,7 +32,17 @@ export default function NewPatientPage() {
     // mutate() triggers the mutation function defined in useCreatePatient
     // It sends a POST request to /api/patients with the form data + clinic_id
     createPatient.mutate(
-      { ...data, clinic_id: activeClinicId },
+      {
+        first_name: data.first_name,
+        last_name: data.last_name,
+        dni: data.dni,
+        phone: data.phone,
+        whatsapp_enabled: data.whatsapp_enabled,
+        insurance_provider: data.insurance_provider,
+        insurance_plan: data.insurance_plan,
+        insurance_member_number: data.insurance_member_number,
+        clinic_id: activeClinicId,
+      },
       {
         // onSuccess runs ONLY if the mutation succeeds
         onSuccess: () => {

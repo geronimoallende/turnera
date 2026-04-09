@@ -42,9 +42,12 @@ export default function PatientsPage() {
     setPage(1) // Reset to page 1 when search changes
   }, [])
 
-  // Fetch patients using our React Query hook
-  // This returns { data, isLoading, error } automatically
-  const { data, isLoading } = usePatients(activeClinicId, search, page)
+  // Fetch patients using our React Query hook.
+  // isLoading: true only on the very first fetch (no cache at all).
+  // isFetching: true whenever a request is in flight (including refetches after
+  // the user types in the search box). Passing both lets PatientTable show
+  // "Searching…" during subsequent searches instead of flashing "No patients found."
+  const { data, isLoading, isFetching } = usePatients(activeClinicId, search, page)
 
   const patients = data?.data ?? []
   const pagination = data?.pagination
@@ -66,7 +69,7 @@ export default function PatientsPage() {
       <PatientSearch onSearch={handleSearch} />
 
       {/* Table */}
-      <PatientTable patients={patients} isLoading={isLoading} />
+      <PatientTable patients={patients} isLoading={isLoading} isFetching={isFetching} />
 
       {/* Pagination controls */}
       {pagination && pagination.totalPages > 1 && (

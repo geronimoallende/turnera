@@ -10,7 +10,7 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -22,10 +22,18 @@ import type { ScheduleBlock } from "@/lib/hooks/use-doctors"
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
+const timeMultipleOf5 = z.string().min(1, "Required").refine(
+  (val) => {
+    const parts = val.split(":")
+    return parts.length === 2 && Number(parts[1]) % 5 === 0
+  },
+  { message: "Minutes must be in 5-minute increments (e.g. 08:00, 08:05, 08:30)" }
+)
+
 const addBlockSchema = z.object({
   day_of_week: z.number().int().min(0).max(6),
-  start_time: z.string().min(1, "Required"),
-  end_time: z.string().min(1, "Required"),
+  start_time: timeMultipleOf5,
+  end_time: timeMultipleOf5,
   slot_duration_minutes: z.number().int().min(5).max(120).optional(),
   valid_from: z.string().optional(),
   valid_until: z.string().optional(),
@@ -37,6 +45,7 @@ type Props = {
   schedules: ScheduleBlock[]
   canEdit: boolean
   isCreating: boolean
+  isCreateSuccess: boolean
   createError?: string | null
   onAdd: (data: AddBlockFormData) => void
   onDelete: (scheduleId: string) => void
@@ -47,6 +56,7 @@ export function ScheduleEditor({
   schedules,
   canEdit,
   isCreating,
+  isCreateSuccess,
   createError,
   onAdd,
   onDelete,
@@ -67,10 +77,16 @@ export function ScheduleEditor({
     },
   })
 
+  // Close form and reset when creation succeeds
+  useEffect(() => {
+    if (isCreateSuccess) {
+      reset()
+      setShowAddForm(false)
+    }
+  }, [isCreateSuccess, reset])
+
   function handleAdd(data: AddBlockFormData) {
     onAdd(data)
-    reset()
-    setShowAddForm(false)
   }
 
   // Group schedules by day_of_week
@@ -196,6 +212,7 @@ export function ScheduleEditor({
                 <Input
                   type="time"
                   {...register("start_time")}
+                  step={300}
                   className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
                 />
                 {errors.start_time && (
@@ -208,6 +225,7 @@ export function ScheduleEditor({
                 <Input
                   type="time"
                   {...register("end_time")}
+                  step={300}
                   className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
                 />
                 {errors.end_time && (

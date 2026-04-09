@@ -26,6 +26,8 @@ const updateSchema = z.object({
   clinic_id: z.uuidv4(),
   first_name: z.string().min(1).optional(),
   last_name: z.string().min(1).optional(),
+  phone: z.string().nullable().optional(),
+  whatsapp_enabled: z.boolean().optional(),
   specialty: z.string().nullable().optional(),
   license_number: z.string().nullable().optional(),
 })
@@ -54,7 +56,9 @@ export const GET = withErrorHandler(async (request: NextRequest, context) => {
       staff!inner (
         first_name,
         last_name,
-        email
+        email,
+        phone,
+        whatsapp_enabled
       )
     `
     )
@@ -100,6 +104,8 @@ export const GET = withErrorHandler(async (request: NextRequest, context) => {
     first_name: string
     last_name: string
     email: string
+    phone: string | null
+    whatsapp_enabled: boolean
   }
 
   // 4. Return a flat response with clinic_settings nested inside
@@ -110,6 +116,8 @@ export const GET = withErrorHandler(async (request: NextRequest, context) => {
       first_name: staff.first_name,
       last_name: staff.last_name,
       email: staff.email,
+      phone: staff.phone,
+      whatsapp_enabled: staff.whatsapp_enabled,
       specialty: doctorData.specialty,
       license_number: doctorData.license_number,
       clinic_settings: settingsData ?? null,
@@ -124,7 +132,7 @@ export const PUT = withErrorHandler(async (request: NextRequest, context) => {
 
   // 1. Parse and validate the body
   const body = await request.json()
-  const { clinic_id, first_name, last_name, specialty, license_number } = updateSchema.parse(body)
+  const { clinic_id, first_name, last_name, phone, whatsapp_enabled, specialty, license_number } = updateSchema.parse(body)
 
   const supabase = await createClient()
 
@@ -136,7 +144,7 @@ export const PUT = withErrorHandler(async (request: NextRequest, context) => {
 
   // 3. Check there's at least one field to update
   const hasProfileUpdate = specialty !== undefined || license_number !== undefined
-  const hasStaffUpdate = first_name !== undefined || last_name !== undefined
+  const hasStaffUpdate = first_name !== undefined || last_name !== undefined || phone !== undefined || whatsapp_enabled !== undefined
 
   if (!hasProfileUpdate && !hasStaffUpdate) {
     throw new ApiError("No fields to update", 400, "NO_FIELDS")
@@ -183,9 +191,11 @@ export const PUT = withErrorHandler(async (request: NextRequest, context) => {
 
   // 7. Update `staff` table if name changed
   if (hasStaffUpdate) {
-    const staffUpdate: Record<string, string> = {}
+    const staffUpdate: Record<string, string | boolean | null> = {}
     if (first_name !== undefined) staffUpdate.first_name = first_name
     if (last_name !== undefined) staffUpdate.last_name = last_name
+    if (phone !== undefined) staffUpdate.phone = phone
+    if (whatsapp_enabled !== undefined) staffUpdate.whatsapp_enabled = whatsapp_enabled
 
     const { error: staffError } = await supabase
       .from("staff")
@@ -209,7 +219,9 @@ export const PUT = withErrorHandler(async (request: NextRequest, context) => {
       staff!inner (
         first_name,
         last_name,
-        email
+        email,
+        phone,
+        whatsapp_enabled
       )
     `
     )
@@ -224,6 +236,8 @@ export const PUT = withErrorHandler(async (request: NextRequest, context) => {
     first_name: string
     last_name: string
     email: string
+    phone: string | null
+    whatsapp_enabled: boolean
   }
 
   return NextResponse.json({
@@ -233,6 +247,8 @@ export const PUT = withErrorHandler(async (request: NextRequest, context) => {
       first_name: updatedStaff.first_name,
       last_name: updatedStaff.last_name,
       email: updatedStaff.email,
+      phone: updatedStaff.phone,
+      whatsapp_enabled: updatedStaff.whatsapp_enabled,
       specialty: updated.specialty,
       license_number: updated.license_number,
     },

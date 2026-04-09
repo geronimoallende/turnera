@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useCreateAppointment } from "@/lib/hooks/use-appointments"
+import { useDoctorSchedulesForDate } from "@/lib/hooks/use-doctors"
 import { PatientSearch } from "./patient-search"
 import { InlinePatientForm } from "./inline-patient-form"
 import {
@@ -88,6 +89,24 @@ export function BookingForm({
 
   // The mutation hook — handles the API call
   const createAppointment = useCreateAppointment()
+
+  // ── Schedule awareness ──────────────────────────────────────
+  const selectedDate = slotInfo ? format(slotInfo.start, "yyyy-MM-dd") : manualDate
+  const selectedDoctorId = slotInfo?.doctorId || manualDoctorId
+  const { data: schedulesData } = useDoctorSchedulesForDate(clinicId, selectedDate)
+  const doctorSchedule = selectedDoctorId ? schedulesData?.data?.[selectedDoctorId] : undefined
+
+  const scheduleWarning = (() => {
+    if (!selectedDoctorId || !schedulesData?.data) return null
+    if (!doctorSchedule) return null
+    if (doctorSchedule.is_blocked) {
+      return { type: "blocked" as const, message: `Doctor not available${doctorSchedule.block_reason ? `: ${doctorSchedule.block_reason}` : ""}` }
+    }
+    if (doctorSchedule.blocks.length === 0) {
+      return { type: "no-schedule" as const, message: "Doctor is not working this day" }
+    }
+    return null
+  })()
 
   // ── Derived values ───────────────────────────────────────────
 
@@ -232,6 +251,20 @@ export function BookingForm({
         />
       )}
 
+      {/* Schedule warning */}
+      {scheduleWarning && (
+        <div className={`rounded-lg px-3 py-2 text-xs ${
+          scheduleWarning.type === "blocked" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"
+        }`}>
+          {scheduleWarning.message}
+        </div>
+      )}
+      {doctorSchedule && doctorSchedule.blocks.length > 0 && (
+        <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+          Working hours: {doctorSchedule.blocks.map((b) => `${b.start_time.slice(0, 5)} - ${b.end_time.slice(0, 5)}`).join(", ")}
+        </div>
+      )}
+
       {/* Selected patient card — shows after selection */}
       {hasPatient && (
         <div>
@@ -304,6 +337,8 @@ export function BookingForm({
             value={startTime}
             onChange={(e) => setStartTime(e.target.value)}
             className="mt-1 border-[#e5e5e5] shadow-none"
+            min={doctorSchedule?.blocks?.[0]?.start_time?.slice(0, 5)}
+            max={doctorSchedule?.blocks?.[doctorSchedule.blocks.length - 1]?.end_time?.slice(0, 5)}
           />
         </div>
       </div>

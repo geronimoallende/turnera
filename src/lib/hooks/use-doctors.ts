@@ -13,7 +13,7 @@
  * 4. Available Slots (fetch for a date)
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -37,6 +37,8 @@ export type DoctorDetail = {
   first_name: string
   last_name: string
   email: string
+  phone: string | null
+  whatsapp_enabled: boolean
   specialty: string | null
   license_number: string | null
   clinic_settings: {
@@ -92,6 +94,8 @@ type UpdateDoctorInput = {
   clinic_id: string
   first_name?: string
   last_name?: string
+  phone?: string | null
+  whatsapp_enabled?: boolean
   specialty?: string | null
   license_number?: string | null
 }
@@ -483,5 +487,38 @@ export function useAvailableSlots(
       return res.json()
     },
     enabled: !!doctorId && !!clinicId && !!date,
+  })
+}
+
+// ─── 5. Doctor Schedules For Date (batch) ────────────────────────
+
+import type { EffectiveSchedule } from "@/lib/schedule-utils"
+
+/**
+ * Fetch the effective schedule for ALL doctors at a clinic on a specific date.
+ * Returns a map of doctorId → EffectiveSchedule.
+ *
+ * keepPreviousData prevents flash when navigating between days —
+ * the previous day's businessHours stay visible while new data loads.
+ */
+export function useDoctorSchedulesForDate(
+  clinicId: string | null,
+  date: string | null
+) {
+  return useQuery<{ data: Record<string, EffectiveSchedule> }>({
+    queryKey: ["doctor-schedules-for-date", clinicId, date],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/doctors/schedules-for-date?clinic_id=${clinicId}&date=${date}`
+      )
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || "Failed to fetch schedules for date")
+      }
+      return res.json()
+    },
+    enabled: !!clinicId && !!date,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   })
 }

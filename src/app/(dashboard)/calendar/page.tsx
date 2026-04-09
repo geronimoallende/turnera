@@ -23,19 +23,25 @@
 
 "use client"
 
-import { useState, useCallback, useEffect, useRef } from "react"
+import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import dynamic from "next/dynamic"
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns"
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns"
 import { toast } from "sonner"
 import { useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
 import { useClinic } from "@/providers/clinic-provider"
-import { useDoctors } from "@/lib/hooks/use-doctors"
+import {
+  useDoctors,
+  useDoctorSchedulesForDate,
+  useDoctorSchedules,
+  useDoctorOverrides,
+} from "@/lib/hooks/use-doctors"
 import {
   useAppointments,
   useRescheduleAppointment,
 } from "@/lib/hooks/use-appointments"
 import type { AppointmentFilters } from "@/lib/hooks/use-appointments"
+import { computeEffectiveSchedule, type EffectiveSchedule } from "@/lib/schedule-utils"
 import { CalendarHeader } from "@/components/calendar/calendar-header"
 import { CalendarSidebar } from "@/components/calendar/calendar-sidebar"
 import { AppointmentSidePanel } from "@/components/calendar/side-panel/appointment-side-panel"
@@ -51,8 +57,8 @@ const CalendarLoading = () => (
     Loading calendar...
   </div>
 )
-const MultiDoctorGrid = dynamic(
-  () => import("@/components/calendar/multi-doctor-grid").then((m) => ({ default: m.MultiDoctorGrid })),
+const CustomTimeGrid = dynamic(
+  () => import("@/components/calendar/custom-time-grid").then((m) => ({ default: m.CustomTimeGrid })),
   { ssr: false, loading: CalendarLoading }
 )
 const WeekView = dynamic(
@@ -146,6 +152,63 @@ export default function CalendarPage() {
   // ── Fetch appointments with the filters ──────────────────────
   const { data: appointmentsData } = useAppointments(activeClinicId, filters)
   const appointments = appointmentsData?.data ?? []
+
+  // ── Fetch doctor schedules for the current date (day view) ──
+  const { data: schedulesForDate } = useDoctorSchedulesForDate(
+    activeClinicId,
+    format(currentDate, "yyyy-MM-dd")
+  )
+
+  // ── Fetch week schedule data for week view ──────────────────
+  // Uses the per-doctor schedule + overrides hooks (one doctor in week view)
+  const { data: weekDoctorSchedules } = useDoctorSchedules(
+    view === "week" ? weekViewDoctorId : null,
+    activeClinicId
+  )
+  const { data: weekDoctorOverrides } = useDoctorOverrides(
+    view === "week" ? weekViewDoctorId : null,
+    activeClinicId
+  )
+
+  // Compute effective schedule per day of the visible week
+  const weekScheduleMap = useMemo(() => {
+    if (view !== "week" || !weekDoctorSchedules?.data) return {}
+    const start = startOfWeek(currentDate, { weekStartsOn: 1 })
+    const end = endOfWeek(currentDate, { weekStartsOn: 1 })
+    const days = eachDayOfInterval({ start, end })
+    const result: Record<string, EffectiveSchedule> = {}
+
+    for (const day of days) {
+      const dateStr = format(day, "yyyy-MM-dd")
+      const dow = day.getDay()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allSchedules = weekDoctorSchedules.data as any[]
+      const daySchedules = (allSchedules ?? [])
+        .filter((s: any) =>
+          s.day_of_week === dow &&
+          (s.is_active ?? true) &&
+          s.valid_from <= dateStr &&
+          (s.valid_until === null || s.valid_until >= dateStr)
+        )
+        .map((s: any) => ({
+          start_time: s.start_time as string,
+          end_time: s.end_time as string,
+          is_active: (s.is_active ?? true) as boolean,
+        }))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allOverrides = (weekDoctorOverrides?.data ?? []) as any[]
+      const dayOverrides = allOverrides
+        .filter((o: any) => o.override_date === dateStr)
+        .map((o: any) => ({
+          override_type: o.override_type as "block" | "available",
+          start_time: o.start_time as string | null,
+          end_time: o.end_time as string | null,
+          reason: o.reason as string | null,
+        }))
+      result[dateStr] = computeEffectiveSchedule(daySchedules, dayOverrides)
+    }
+    return result
+  }, [view, currentDate, weekDoctorSchedules, weekDoctorOverrides])
 
   // ── Event handlers ───────────────────────────────────────────
 
@@ -350,15 +413,15 @@ export default function CalendarPage() {
         {/* Center: the active calendar view */}
         <div className="flex-1 overflow-hidden">
           {view === "day" && (
-            <MultiDoctorGrid
+            <CustomTimeGrid
               date={currentDate}
               doctors={doctors.filter((d) =>
                 selectedDoctorIds.includes(d.id)
               )}
               appointments={appointments}
+              schedulesByDoctor={schedulesForDate?.data ?? {}}
               onSlotSelect={handleSlotSelect}
               onEventClick={handleEventClick}
-              onEventDrop={handleEventDrop}
             />
           )}
           {view === "week" && (
@@ -366,6 +429,7 @@ export default function CalendarPage() {
               date={currentDate}
               appointments={appointments}
               doctorId={weekViewDoctorId}
+              weekSchedules={weekScheduleMap}
               onEventClick={handleEventClick}
               onSlotSelect={handleSlotSelect}
             />

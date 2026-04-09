@@ -16,7 +16,13 @@
       "mcp__supabase__list_migrations",
       "mcp__supabase__execute_sql",
       "mcp__supabase__apply_migration",
-      "Read(//c/Users/UPCN/OneDrive/SecondBrain/01-Projects/UPCN/Turnera/**)"
+      "Read(//c/Users/UPCN/OneDrive/SecondBrain/01-Projects/UPCN/Turnera/**)",
+      "Read(//c/Users/UPCN/OneDrive/SecondBrain/**)",
+      "Bash(npm run:*)",
+      "Bash(npx next:*)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\UPCN\\.claude\\plans"
     ]
   },
   "enabledPlugins": {

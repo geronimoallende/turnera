@@ -16,7 +16,7 @@
  * Each hook returns an object with { data, isLoading, error, ... }
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 
 // ─── Types ───────────────────────────────────────────────────────
 // These describe the shape of the API responses
@@ -29,7 +29,7 @@ export type PatientListItem = {
   dni: string | null
   phone: string | null
   email: string | null
-  whatsapp_phone: string | null
+  whatsapp_enabled: boolean
   is_active: boolean | null
   blacklist_status: string
   no_show_count: number
@@ -61,7 +61,7 @@ export type PatientDetail = {
   dni: string | null
   phone: string | null
   email: string | null
-  whatsapp_phone: string | null
+  whatsapp_enabled: boolean
   date_of_birth: string | null
   gender: string | null
   blood_type: string | null
@@ -84,6 +84,10 @@ type CreatePatientInput = {
   last_name: string
   dni: string
   phone?: string
+  whatsapp_enabled?: boolean
+  insurance_provider?: string
+  insurance_plan?: string
+  insurance_member_number?: string
   clinic_id: string
 }
 
@@ -95,7 +99,7 @@ type UpdatePatientInput = {
   dni?: string | null
   phone?: string | null
   email?: string | null
-  whatsapp_phone?: string | null
+  whatsapp_enabled?: boolean
   date_of_birth?: string | null
   gender?: string | null
   blood_type?: string | null
@@ -151,6 +155,9 @@ export function usePatients(
     // Only run this query if we have a clinicId
     // (prevents fetching before the clinic is selected)
     enabled: !!clinicId,
+    // While a new search is in-flight, keep showing the previous results instead
+    // of flashing an empty state. Matches the pattern in useDoctorSchedulesForDate.
+    placeholderData: keepPreviousData,
   })
 }
 

@@ -151,8 +151,8 @@ export const POST = withErrorHandler(async (
       start_time,
       end_time,
       slot_duration_minutes: resolvedSlotDuration,
-      valid_from: valid_from ?? null,
-      valid_until: valid_until ?? null,
+      valid_from: valid_from || null,
+      valid_until: valid_until || null,
     })
     .select()
     .single()

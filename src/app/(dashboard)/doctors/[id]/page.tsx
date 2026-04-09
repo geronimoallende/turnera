@@ -36,7 +36,8 @@ import { ClinicSettingsForm, type ClinicSettingsFormData } from "@/components/do
 import { ScheduleEditor } from "@/components/doctors/schedule-editor"
 import { OverrideManager } from "@/components/doctors/override-manager"
 import { SlotsPreview } from "@/components/doctors/slots-preview"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, CalendarDays } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 export default function DoctorDetailPage({
   params,
@@ -160,10 +161,18 @@ export default function DoctorDetailPage({
         Back to doctors
       </Link>
 
-      {/* Doctor name heading */}
-      <h1 className="text-2xl font-semibold text-[#1a1a1a]">
-        {doctor.last_name}, {doctor.first_name}
-      </h1>
+      {/* Doctor name heading + preview link */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-[#1a1a1a]">
+          {doctor.last_name}, {doctor.first_name}
+        </h1>
+        <Link href={`/doctors/${doctorId}/schedule-preview`}>
+          <Button variant="outline" size="sm" className="gap-1.5">
+            <CalendarDays className="h-4 w-4" />
+            Preview schedule
+          </Button>
+        </Link>
+      </div>
 
       {/* Section 1: Profile */}
       <div className="rounded-md border border-[#e5e5e5] bg-white p-6">
@@ -171,6 +180,8 @@ export default function DoctorDetailPage({
           defaultValues={{
             first_name: doctor.first_name,
             last_name: doctor.last_name,
+            phone: doctor.phone ?? null,
+            whatsapp_enabled: doctor.whatsapp_enabled ?? false,
             specialty: doctor.specialty,
             license_number: doctor.license_number,
           }}
@@ -209,6 +220,7 @@ export default function DoctorDetailPage({
           schedules={schedules}
           canEdit={canEditSchedule}
           isCreating={createSchedule.isPending}
+          isCreateSuccess={createSchedule.isSuccess}
           createError={createSchedule.error?.message}
           onAdd={handleAddSchedule}
           onDelete={handleDeleteSchedule}

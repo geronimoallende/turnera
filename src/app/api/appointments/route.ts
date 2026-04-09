@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { withErrorHandler, ApiError } from "@/lib/error-handler"
+import { computeEffectiveSchedule, isTimeWithinSchedule } from "@/lib/schedule-utils"
 
 // ─── Validation Schemas ──────────────────────────────────────────
 
@@ -261,6 +262,70 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
   const endHours = Math.floor(endTotalMinutes / 60)
   const endMins = endTotalMinutes % 60
   const end_time = `${String(endHours).padStart(2, "0")}:${String(endMins).padStart(2, "0")}`
+
+  // ── Step 4b: Validate against doctor schedule ────────────────
+  // Entreturno bypasses — secretaries MUST be able to squeeze in patients.
+  if (!validated.is_entreturno) {
+    const appointmentDateObj = new Date(validated.appointment_date + "T12:00:00")
+    const dayOfWeek = appointmentDateObj.getUTCDay()
+    const dayNames = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"]
+
+    const { data: scheduleRows } = await supabase
+      .from("doctor_schedules")
+      .select("start_time, end_time, is_active")
+      .eq("doctor_id", validated.doctor_id)
+      .eq("clinic_id", validated.clinic_id)
+      .eq("day_of_week", dayOfWeek)
+      .eq("is_active", true)
+      .lte("valid_from", validated.appointment_date)
+      .or(`valid_until.is.null,valid_until.gte.${validated.appointment_date}`)
+
+    const { data: overrideRows } = await supabase
+      .from("schedule_overrides")
+      .select("override_type, start_time, end_time, reason")
+      .eq("doctor_id", validated.doctor_id)
+      .eq("clinic_id", validated.clinic_id)
+      .eq("override_date", validated.appointment_date)
+
+    const effective = computeEffectiveSchedule(
+      (scheduleRows ?? []).map((r) => ({
+        start_time: r.start_time,
+        end_time: r.end_time,
+        is_active: r.is_active ?? true,
+      })),
+      (overrideRows ?? []).map((r) => ({
+        override_type: r.override_type as "block" | "available",
+        start_time: r.start_time,
+        end_time: r.end_time,
+        reason: r.reason,
+      }))
+    )
+
+    if (effective.is_blocked) {
+      throw new ApiError(
+        `Doctor is not available on ${validated.appointment_date}${effective.block_reason ? ` (${effective.block_reason})` : ""}`,
+        400,
+        "DOCTOR_BLOCKED"
+      )
+    }
+
+    if (effective.blocks.length === 0) {
+      throw new ApiError(
+        `Doctor has no schedule configured for ${dayNames[dayOfWeek]}`,
+        400,
+        "NO_SCHEDULE"
+      )
+    }
+
+    if (!isTimeWithinSchedule(validated.start_time, end_time, effective.blocks)) {
+      const hoursStr = effective.blocks.map((b) => `${b.start_time} - ${b.end_time}`).join(", ")
+      throw new ApiError(
+        `Appointment time ${validated.start_time} - ${end_time} is outside working hours (${hoursStr})`,
+        400,
+        "OUTSIDE_SCHEDULE"
+      )
+    }
+  }
 
   // ── Step 5: Insert the appointment ───────────────────────────
   // The database trigger `check_appointment_overlap` will automatically

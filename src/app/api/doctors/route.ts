@@ -43,6 +43,7 @@ const createSchema = z.object({
   first_name: z.string().min(1, "First name is required"),
   last_name: z.string().min(1, "Last name is required"),
   phone: z.string().optional(),
+  whatsapp_enabled: z.boolean().optional().default(true),
   specialty: z.string().optional(),
   license_number: z.string().optional(),
   slot_duration: z.number().int().min(5).max(120).optional().default(30),
@@ -138,6 +139,7 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     first_name,
     last_name,
     phone,
+    whatsapp_enabled,
     specialty,
     license_number,
     slot_duration,
@@ -242,6 +244,16 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     staff_clinic_id: string
     doctor_id: string
     settings_id: string
+  }
+
+  // If whatsapp_enabled is false, update the staff record.
+  // The RPC function creates staff with DB default (true), so we only
+  // need to update when the user explicitly unchecked it.
+  if (!whatsapp_enabled) {
+    await supabase
+      .from("staff")
+      .update({ whatsapp_enabled: false })
+      .eq("id", ids.staff_id)
   }
 
   logger.info(

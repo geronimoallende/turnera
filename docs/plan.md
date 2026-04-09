@@ -348,6 +348,7 @@ RLS: SELECT by clinic admin who invited + the invited doctor. INSERT by clinic a
 - [x] Supabase Realtime subscription for live calendar updates
 - [x] Doctor appointment permission toggles (can_create/cancel_appointments, admin-controlled)
 - [x] Status constants (colors, labels, valid transitions)
+- [x] Patient search: accent+case insensitive via generated column + GIN trigram (migration 022) + loading-state fix (no more "not found" flash)
 - [ ] Playwright E2E booking flow (deferred to Week 6)
 - [ ] Duplicate booking prevention UI warning (handled by DB trigger, UI warning deferred)
 

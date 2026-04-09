@@ -18,7 +18,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { useForm } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { ArrowLeft, UserPlus, Link as LinkIcon, Search, CheckCircle2, AlertCircle } from "lucide-react"
@@ -32,6 +32,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 // ─── Validation Schemas ─────────────────────────────────────────
@@ -42,6 +43,7 @@ const createDoctorSchema = z.object({
   first_name: z.string().min(1, "First name is required"),
   last_name: z.string().min(1, "Last name is required"),
   phone: z.string().optional(),
+  whatsapp_enabled: z.boolean(),
   specialty: z.string().optional(),
   license_number: z.string().optional(),
   slot_duration: z.number().int().min(5).max(120),
@@ -144,10 +146,12 @@ function CreateDoctorForm({
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
   } = useForm<CreateDoctorFormData>({
     resolver: zodResolver(createDoctorSchema),
     defaultValues: {
+      whatsapp_enabled: true,
       slot_duration: 30,
       fee: 0,
     },
@@ -216,6 +220,27 @@ function CreateDoctorForm({
         </Label>
         <Input id="phone" {...register("phone")} className={inputClass} />
       </div>
+
+      {/* WhatsApp checkbox */}
+      <Controller
+        name="whatsapp_enabled"
+        control={control}
+        render={({ field }) => (
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="doctor_create_whatsapp"
+              checked={field.value}
+              onCheckedChange={field.onChange}
+            />
+            <Label
+              htmlFor="doctor_create_whatsapp"
+              className="text-sm text-gray-600 cursor-pointer"
+            >
+              This phone has WhatsApp
+            </Label>
+          </div>
+        )}
+      />
 
       {/* Specialty + License row */}
       <div className="grid gap-4 sm:grid-cols-2">

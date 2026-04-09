@@ -2,8 +2,8 @@
  * PatientForm — reusable form for creating and editing patients.
  *
  * Used by two pages:
- * - /patients/new (create mode): shows only 4 fields
- * - /patients/[id] (edit mode): shows all fields, split into sections
+ * - /patients/new (create mode): 7 fields in 2 sections
+ * - /patients/[id] (edit mode): all fields, split into sections
  *
  * Why reusable? Because create and edit forms share the same fields,
  * validation, and submission logic. The only difference is:
@@ -15,47 +15,49 @@
  * - zod: defines validation rules (same library as the API routes)
  * - @hookform/resolvers: connects zod to react-hook-form
  *
- * How react-hook-form works:
- * 1. useForm() creates a form instance with register, handleSubmit, etc.
- * 2. register("fieldName") connects an <input> to the form
- * 3. handleSubmit(onSubmit) validates → if valid, calls onSubmit(data)
- * 4. formState.errors contains validation error messages
+ * WhatsApp design:
+ * - One phone field + one boolean checkbox "Has WhatsApp"
+ * - Default: checked (99% of Argentine patients use WhatsApp on their phone)
+ * - Unchecked = landline or no WhatsApp (rare edge case)
  */
 
 "use client"
 
-import { useForm } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 
 // ─── Validation Schemas ──────────────────────────────────────────
 
-/** Schema for the create form (minimal: 4 fields) */
+/** Schema for the create form (7 fields, 2 sections) */
 export const createPatientSchema = z.object({
   first_name: z.string().min(1, "First name is required"),
   last_name: z.string().min(1, "Last name is required"),
   dni: z.string().min(1, "DNI is required"),
   phone: z.string().optional(),
+  whatsapp_enabled: z.boolean(),
+  insurance_provider: z.string().optional(),
+  insurance_plan: z.string().optional(),
+  insurance_member_number: z.string().optional(),
 })
 
 /** Schema for the edit form (all fields) */
 export const editPatientSchema = z.object({
-  // Patient identity
   first_name: z.string().min(1, "First name is required"),
   last_name: z.string().min(1, "Last name is required"),
-  dni: z.string().optional(), // Editable — DNI can be corrected by staff
+  dni: z.string().optional(),
   phone: z.string().nullable().optional(),
+  whatsapp_enabled: z.boolean(),
   email: z.string().email("Invalid email").nullable().optional().or(z.literal("")),
-  whatsapp_phone: z.string().nullable().optional(),
   date_of_birth: z.string().nullable().optional(),
   gender: z.string().nullable().optional(),
   blood_type: z.string().nullable().optional(),
   allergies: z.string().nullable().optional(),
-  // Insurance & notes
   insurance_provider: z.string().nullable().optional(),
   insurance_plan: z.string().nullable().optional(),
   insurance_member_number: z.string().nullable().optional(),
@@ -79,72 +81,148 @@ export function CreatePatientForm({
   isSubmitting,
   error,
 }: CreateFormProps) {
-  // useForm sets up the form with zod validation
   const {
-    register, // Connects inputs to the form
-    handleSubmit, // Wraps onSubmit with validation
-    formState: { errors }, // Contains field-level error messages
+    register,
+    handleSubmit,
+    control,
+    formState: { errors },
   } = useForm<CreatePatientFormData>({
     resolver: zodResolver(createPatientSchema),
+    defaultValues: {
+      whatsapp_enabled: true,
+    },
   })
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      {/* First name */}
-      <div className="space-y-1.5">
-        <Label htmlFor="first_name" className="text-sm text-[#1a1a1a]">
-          First name *
-        </Label>
-        <Input
-          id="first_name"
-          {...register("first_name")}
-          className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      {/* ── Section 1: Essential Info ── */}
+      <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {/* First name */}
+          <div className="space-y-1.5">
+            <Label htmlFor="first_name" className="text-sm text-[#1a1a1a]">
+              First name *
+            </Label>
+            <Input
+              id="first_name"
+              {...register("first_name")}
+              className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
+            />
+            {errors.first_name && (
+              <p className="text-xs text-red-600">{errors.first_name.message}</p>
+            )}
+          </div>
+
+          {/* Last name */}
+          <div className="space-y-1.5">
+            <Label htmlFor="last_name" className="text-sm text-[#1a1a1a]">
+              Last name *
+            </Label>
+            <Input
+              id="last_name"
+              {...register("last_name")}
+              className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
+            />
+            {errors.last_name && (
+              <p className="text-xs text-red-600">{errors.last_name.message}</p>
+            )}
+          </div>
+
+          {/* DNI */}
+          <div className="space-y-1.5">
+            <Label htmlFor="dni" className="text-sm text-[#1a1a1a]">
+              DNI *
+            </Label>
+            <Input
+              id="dni"
+              {...register("dni")}
+              className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
+            />
+            {errors.dni && (
+              <p className="text-xs text-red-600">{errors.dni.message}</p>
+            )}
+          </div>
+
+          {/* Phone */}
+          <div className="space-y-1.5">
+            <Label htmlFor="phone" className="text-sm text-[#1a1a1a]">
+              Phone
+            </Label>
+            <Input
+              id="phone"
+              {...register("phone")}
+              className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        {/* WhatsApp checkbox — below the grid, aligned with phone */}
+        <Controller
+          name="whatsapp_enabled"
+          control={control}
+          render={({ field }) => (
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="whatsapp_enabled"
+                checked={field.value}
+                onCheckedChange={field.onChange}
+              />
+              <Label
+                htmlFor="whatsapp_enabled"
+                className="text-sm text-gray-600 cursor-pointer"
+              >
+                This phone has WhatsApp
+              </Label>
+            </div>
+          )}
         />
-        {errors.first_name && (
-          <p className="text-xs text-red-600">{errors.first_name.message}</p>
-        )}
       </div>
 
-      {/* Last name */}
-      <div className="space-y-1.5">
-        <Label htmlFor="last_name" className="text-sm text-[#1a1a1a]">
-          Last name *
-        </Label>
-        <Input
-          id="last_name"
-          {...register("last_name")}
-          className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
-        />
-        {errors.last_name && (
-          <p className="text-xs text-red-600">{errors.last_name.message}</p>
-        )}
-      </div>
+      {/* ── Section 2: Insurance ── */}
+      <div className="space-y-4">
+        <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider">
+          Insurance
+        </h2>
 
-      {/* DNI */}
-      <div className="space-y-1.5">
-        <Label htmlFor="dni" className="text-sm text-[#1a1a1a]">
-          DNI *
-        </Label>
-        <Input
-          id="dni"
-          {...register("dni")}
-          className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
-        />
-        {errors.dni && (
-          <p className="text-xs text-red-600">{errors.dni.message}</p>
-        )}
-      </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {/* Insurance provider */}
+          <div className="space-y-1.5">
+            <Label htmlFor="insurance_provider" className="text-sm text-[#1a1a1a]">
+              Provider
+            </Label>
+            <Input
+              id="insurance_provider"
+              {...register("insurance_provider")}
+              placeholder="OSDE, Swiss Medical, etc."
+              className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
+            />
+          </div>
 
-      {/* Phone (optional) */}
-      <div className="space-y-1.5">
-        <Label htmlFor="phone" className="text-sm text-[#1a1a1a]">
-          Phone
-        </Label>
-        <Input
-          id="phone"
-          {...register("phone")}
-          className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
-        />
+          {/* Insurance plan */}
+          <div className="space-y-1.5">
+            <Label htmlFor="insurance_plan" className="text-sm text-[#1a1a1a]">
+              Plan
+            </Label>
+            <Input
+              id="insurance_plan"
+              {...register("insurance_plan")}
+              placeholder="OSDE 210, etc."
+              className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
+            />
+          </div>
+
+          {/* Member number */}
+          <div className="space-y-1.5">
+            <Label htmlFor="insurance_member_number" className="text-sm text-[#1a1a1a]">
+              Member number
+            </Label>
+            <Input
+              id="insurance_member_number"
+              {...register("insurance_member_number")}
+              className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Error from API (e.g., "Patient already registered") */}
@@ -182,10 +260,10 @@ export function EditPatientForm({
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
   } = useForm<EditPatientFormData>({
     resolver: zodResolver(editPatientSchema),
-    // Pre-fill the form with existing patient data
     defaultValues,
   })
 
@@ -226,7 +304,7 @@ export function EditPatientForm({
             )}
           </div>
 
-          {/* DNI (editable — staff can correct typos) */}
+          {/* DNI */}
           <div className="space-y-1.5">
             <Label className="text-sm text-[#1a1a1a]">DNI</Label>
             <Input
@@ -277,15 +355,6 @@ export function EditPatientForm({
             )}
           </div>
 
-          {/* WhatsApp */}
-          <div className="space-y-1.5">
-            <Label className="text-sm text-[#1a1a1a]">WhatsApp</Label>
-            <Input
-              {...register("whatsapp_phone")}
-              className="border-[#e5e5e5] shadow-none focus-visible:ring-blue-500"
-            />
-          </div>
-
           {/* Blood type */}
           <div className="space-y-1.5">
             <Label className="text-sm text-[#1a1a1a]">Blood type</Label>
@@ -306,6 +375,27 @@ export function EditPatientForm({
             />
           </div>
         </div>
+
+        {/* WhatsApp checkbox — below the grid */}
+        <Controller
+          name="whatsapp_enabled"
+          control={control}
+          render={({ field }) => (
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="edit_whatsapp_enabled"
+                checked={field.value}
+                onCheckedChange={field.onChange}
+              />
+              <Label
+                htmlFor="edit_whatsapp_enabled"
+                className="text-sm text-gray-600 cursor-pointer"
+              >
+                This phone has WhatsApp
+              </Label>
+            </div>
+          )}
+        />
       </div>
 
       {/* ── Section 2: Insurance & Notes ── */}
