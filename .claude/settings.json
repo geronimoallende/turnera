@@ -19,7 +19,13 @@
       "Read(//c/Users/UPCN/OneDrive/SecondBrain/01-Projects/UPCN/Turnera/**)",
       "Read(//c/Users/UPCN/OneDrive/SecondBrain/**)",
       "Bash(npm run:*)",
-      "Bash(npx next:*)"
+      "Bash(npx next:*)",
+      "Read(//c/Users/UPCN/.claude/**)",
+      "Bash(echo \"Started PID $!\")",
+      "Read(//tmp/**)",
+      "Bash(curl -s -o /tmp/dash.html -w \"HTTP %{http_code} | %{time_total}s | %{size_download} bytes\\\\n\" http://localhost:3000/dashboard)",
+      "Bash(curl -s -o /tmp/dash2.html -w \"HTTP %{http_code} | %{time_total}s | %{size_download} bytes\\\\n\" http://localhost:3000/dashboard)",
+      "Bash(curl -s -o /tmp/dash3.html -w \"HTTP %{http_code} | %{time_total}s | %{size_download} bytes\\\\n\" http://localhost:3000/dashboard)"
     ],
     "additionalDirectories": [
       "C:\\Users\\UPCN\\.claude\\plans"
@@ -28,7 +34,7 @@
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
-    "supabase@claude-plugins-official": false,
+    "supabase@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "github@claude-plugins-official": true
